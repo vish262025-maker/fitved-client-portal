@@ -445,7 +445,7 @@ function generateProgrammaticArticles(): BlogArticle[] {
         published: true,
         seo_title: expanded?.seo_title || `${title} | FitVed Journal`,
         seo_description: expanded?.seo_description || `Read the complete guide on ${title}. Step-by-step advice, Indian food charts, and expert coaching tips from FitVed.`,
-        canonical_url: `https://getfitved.com/blog/article/${slug}`,
+        canonical_url: `https://www.getfitved.com/blog/article/${slug}`,
         keywords: expanded?.keywords,
         image_alt: expanded?.image_alt,
         content: expanded?.content || defaultContent,

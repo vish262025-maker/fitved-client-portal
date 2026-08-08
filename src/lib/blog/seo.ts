@@ -20,7 +20,7 @@ export function articleKeywords(article: Pick<BlogArticle, "keywords" | "tags">)
 export function articleUrl(article: Pick<BlogArticle, "slug" | "canonical_url" | "recipe_details" | "comparison_details">): string {
   if (article.recipe_details) return `${SITE_URL}/blog/recipe/${article.slug}`;
   if (article.comparison_details) return `${SITE_URL}/blog/compare/${article.slug}`;
-  if (article.canonical_url) return article.canonical_url.replace("https://fitved.com", SITE_URL);
+  if (article.canonical_url) return article.canonical_url.replace("https://fitved.com", SITE_URL).replace("https://getfitved.com", SITE_URL);
   return `${SITE_URL}/blog/article/${article.slug}`;
 }
 
@@ -55,7 +55,7 @@ export function generateArticleSchema(article: BlogArticle, author?: BlogAuthor)
     },
     mainEntityOfPage: {
       "@type": "WebPage",
-      "@id": article.canonical_url || `${SITE_URL}/blog/article/${article.slug}`,
+      "@id": articleUrl(article),
     },
   };
 }
