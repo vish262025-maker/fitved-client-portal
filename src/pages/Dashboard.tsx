@@ -1,4 +1,4 @@
-import { useRef, useState, useEffect } from "react";
+import { useRef, useState, useEffect, useMemo } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
@@ -80,6 +80,32 @@ export default function Dashboard() {
       return data;
     },
   });
+
+  const { data: allPlans = [] } = useQuery({
+    queryKey: ["all-plans-cal", user?.id],
+    enabled: !!user,
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("plans").select("start_date, end_date, training_days, status")
+        .eq("user_id", user!.id)
+        .order("created_at", { ascending: true });
+      return (data ?? []) as { start_date: string; end_date: string; training_days: string[] | null; status: string }[];
+    },
+  });
+
+  const calRange = useMemo(() => {
+    if (!allPlans.length) return null;
+    const starts = allPlans.map((p) => p.start_date).sort();
+    const ends = allPlans.map((p) => p.end_date).sort();
+    const allDays = new Set<string>();
+    allPlans.forEach((p) => (p.training_days ?? []).forEach((d) => allDays.add(d)));
+    return {
+      startDate: starts[0],
+      endDate: ends[ends.length - 1],
+      trainingDays: [...allDays],
+      ranges: allPlans.map((p) => ({ start: p.start_date, end: p.end_date })),
+    };
+  }, [allPlans]);
 
   const { data: latestReport } = useQuery({
     queryKey: ["latest-report", user?.id],
@@ -427,15 +453,16 @@ export default function Dashboard() {
             </div>
           )}
           <ClassCalendar
-            startDate={plan.start_date}
-            endDate={plan.end_date}
-            trainingDays={plan.training_days ?? []}
+            startDate={calRange?.startDate ?? plan.start_date}
+            endDate={calRange?.endDate ?? plan.end_date}
+            trainingDays={calRange?.trainingDays ?? plan.training_days ?? []}
             pauses={allPauses}
             offTimes={offTimes}
             customerSlot={profile?.time_slot ?? null}
             expanded={calExpanded}
             onExpandedChange={setCalExpanded}
             planActive={!!hasActivePlan}
+            planRanges={calRange?.ranges}
           />
         </div>
       )}
@@ -661,15 +688,16 @@ export default function Dashboard() {
               </div>
             )}
             <ClassCalendar
-              startDate={plan.start_date}
-              endDate={plan.end_date}
-              trainingDays={plan.training_days ?? []}
+              startDate={calRange?.startDate ?? plan.start_date}
+              endDate={calRange?.endDate ?? plan.end_date}
+              trainingDays={calRange?.trainingDays ?? plan.training_days ?? []}
               pauses={allPauses}
               offTimes={offTimes}
               customerSlot={profile?.time_slot ?? null}
               expanded={calExpanded}
               onExpandedChange={setCalExpanded}
               planActive={!!hasActivePlan}
+              planRanges={calRange?.ranges}
             />
           </Card>
         )}

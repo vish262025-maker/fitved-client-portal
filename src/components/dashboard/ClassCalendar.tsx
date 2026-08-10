@@ -28,6 +28,7 @@ interface Props {
   onExpandedChange: (v: boolean) => void;
   highlightDate?: string; // optional — rings a specific day (e.g. plan end date)
   planActive?: boolean; // when false, future training days won't show as "upcoming"
+  planRanges?: { start: string; end: string }[]; // when set, dates outside all ranges are gaps (rest)
 }
 
 type DayState = "attended" | "upcoming" | "paused" | "off" | "rest" | "outside";
@@ -50,7 +51,7 @@ export { offTimeAffectsSlot } from "@/lib/sessionPlan";
 
 interface Cell { d: number; date: string; dow: number; state: DayState; isToday: boolean }
 
-export function ClassCalendar({ startDate, endDate, trainingDays, pauses, offTimes, customerSlot, expanded, onExpandedChange, highlightDate, planActive }: Props) {
+export function ClassCalendar({ startDate, endDate, trainingDays, pauses, offTimes, customerSlot, expanded, onExpandedChange, highlightDate, planActive, planRanges }: Props) {
   const today = todayLocalISO();
   const [selected, setSelected] = useState<string | null>(null);
 
@@ -65,6 +66,7 @@ export function ClassCalendar({ startDate, endDate, trainingDays, pauses, offTim
 
   const classify = (date: string, dow: number): DayState => {
     if (date < startDate || date > endDate) return "outside";
+    if (planRanges?.length && !planRanges.some((r) => date >= r.start && date <= r.end)) return "rest";
     if (pauses.some((p) => inRange(date, p.from, p.to))) return trainingIdx.has(dow) ? "paused" : "outside";
     if (offTimes.some((o) => inRange(date, o.from_date, o.to_date) && offTimeAffectsSlot(o.time_slot, customerSlot)))
       return trainingIdx.has(dow) ? "off" : "outside";

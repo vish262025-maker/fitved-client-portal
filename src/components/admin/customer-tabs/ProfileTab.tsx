@@ -105,19 +105,31 @@ export function ProfileTab({ userId }: { userId: string }) {
   });
 
   // ── Class-calendar data (the same view the customer sees) ──────────────
-  const { data: calPlan } = useQuery({
-    queryKey: ["customer-plan-cal", userId],
+  const { data: allCalPlans = [] } = useQuery({
+    queryKey: ["customer-plans-cal", userId],
     queryFn: async () => {
       const { data } = await supabase
         .from("plans")
         .select("start_date, end_date, training_days, status")
         .eq("user_id", userId)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      return data as { start_date: string; end_date: string; training_days: string[] | null; status: string } | null;
+        .order("created_at", { ascending: true });
+      return (data ?? []) as { start_date: string; end_date: string; training_days: string[] | null; status: string }[];
     },
   });
+  const calPlan = allCalPlans.length ? allCalPlans[allCalPlans.length - 1] : null;
+  const calRange = useMemo(() => {
+    if (!allCalPlans.length) return null;
+    const starts = allCalPlans.map((p) => p.start_date).sort();
+    const ends = allCalPlans.map((p) => p.end_date).sort();
+    const allDays = new Set<string>();
+    allCalPlans.forEach((p) => (p.training_days ?? []).forEach((d) => allDays.add(d)));
+    return {
+      startDate: starts[0],
+      endDate: ends[ends.length - 1],
+      trainingDays: [...allDays],
+      ranges: allCalPlans.map((p) => ({ start: p.start_date, end: p.end_date })),
+    };
+  }, [allCalPlans]);
   const { data: calPauses = [] } = useQuery({
     queryKey: ["customer-pauses-cal", userId],
     queryFn: async () => {
@@ -579,9 +591,9 @@ export function ProfileTab({ userId }: { userId: string }) {
               );
             })()}
             <ClassCalendar
-              startDate={calPlan.start_date}
-              endDate={calPlan.end_date}
-              trainingDays={calPlan.training_days ?? []}
+              startDate={calRange?.startDate ?? calPlan.start_date}
+              endDate={calRange?.endDate ?? calPlan.end_date}
+              trainingDays={calRange?.trainingDays ?? calPlan.training_days ?? []}
               pauses={calPauses}
               offTimes={calOffTimes}
               customerSlot={profile?.time_slot ?? null}
@@ -589,6 +601,7 @@ export function ProfileTab({ userId }: { userId: string }) {
               onExpandedChange={setCalExpanded}
               highlightDate={calPlan.end_date}
               planActive={calPlan.status === "active"}
+              planRanges={calRange?.ranges}
             />
           </div>
         ) : (
