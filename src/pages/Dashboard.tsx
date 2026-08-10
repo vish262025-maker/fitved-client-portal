@@ -239,7 +239,7 @@ export default function Dashboard() {
 
   // ── Renewal urgency ───────────────────────────────────────────────────────
   const todayISO    = todayLocalISO();
-  const planEnded   = plan?.status === "cancelled" || plan?.status === "completed" || plan?.status === "paused";
+  const planEnded   = plan?.status === "cancelled" || plan?.status === "completed" || plan?.status === "paused" || (plan as any)?.status === "stopped";
   const hasActivePlan = plan && plan.status === "active";
   const expired     = !!plan && (plan.end_date < todayISO || planEnded);
   const daysToEnd   = plan ? Math.max(0, daysBetween(todayISO, plan.end_date) - 1) : 0;
@@ -412,8 +412,20 @@ export default function Dashboard() {
       )}
 
       {/* My classes calendar */}
-      {hasActivePlan && (
+      {plan && (
         <div ref={calRef}>
+          {!hasActivePlan && (
+            <div className="mx-4 mt-3 rounded-2xl flex items-center gap-3"
+              style={{ background: "#fff4e6", border: "1px solid #f0a720", padding: "14px 18px" }}>
+              <Clock size={18} color="#b37400" />
+              <div>
+                <p className="font-semibold" style={{ fontSize: 14, color: "#b37400" }}>
+                  {plan.end_date >= todayISO ? "Your plan has been stopped" : "Your plan has expired"}
+                </p>
+                <p style={{ fontSize: 12, color: "#8a6c1a" }}>Renew to resume classes. Your past schedule is shown below.</p>
+              </div>
+            </div>
+          )}
           <ClassCalendar
             startDate={plan.start_date}
             endDate={plan.end_date}
@@ -423,6 +435,7 @@ export default function Dashboard() {
             customerSlot={profile?.time_slot ?? null}
             expanded={calExpanded}
             onExpandedChange={setCalExpanded}
+            planActive={!!hasActivePlan}
           />
         </div>
       )}
@@ -633,8 +646,20 @@ export default function Dashboard() {
         </Card>
 
         {/* My classes calendar — includes trainer off-day indicators */}
-        {hasActivePlan && (
+        {plan && (
           <Card className="p-2 rounded-2xl shadow-card md:col-span-2">
+            {!hasActivePlan && (
+              <div className="mx-3 mt-3 rounded-xl flex items-center gap-3"
+                style={{ background: "#fff4e6", border: "1px solid #f0a720", padding: "14px 18px" }}>
+                <Clock size={18} color="#b37400" />
+                <div>
+                  <p className="font-semibold" style={{ fontSize: 14, color: "#b37400" }}>
+                    {plan.end_date >= todayISO ? "Your plan has been stopped" : "Your plan has expired"}
+                  </p>
+                  <p style={{ fontSize: 12, color: "#8a6c1a" }}>Renew to resume classes. Your past schedule is shown below.</p>
+                </div>
+              </div>
+            )}
             <ClassCalendar
               startDate={plan.start_date}
               endDate={plan.end_date}
@@ -644,6 +669,7 @@ export default function Dashboard() {
               customerSlot={profile?.time_slot ?? null}
               expanded={calExpanded}
               onExpandedChange={setCalExpanded}
+              planActive={!!hasActivePlan}
             />
           </Card>
         )}

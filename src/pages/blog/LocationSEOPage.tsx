@@ -66,9 +66,9 @@ export default function LocationSEOPage() {
           <div className="pt-4 flex justify-center">
             <Button
               onClick={() => setTrialModalOpen(true)}
-              className="bg-orange-500 hover:bg-orange-600 text-white font-bold h-12 px-8 shadow-lg text-base"
+              className="bg-orange-500 hover:bg-orange-600 text-white font-bold px-6 sm:px-8 py-3 sm:py-3.5 h-auto min-h-[3rem] w-full sm:w-auto text-base leading-snug text-center whitespace-normal break-words max-w-full shadow-lg transition-all"
             >
-              <Sparkles className="mr-2 h-5 w-5" /> Book FREE Trial in {page.city}
+              Book FREE Trial in {page.city}
             </Button>
           </div>
         </div>

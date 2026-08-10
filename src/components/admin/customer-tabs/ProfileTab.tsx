@@ -561,14 +561,19 @@ export function ProfileTab({ userId }: { userId: string }) {
               const todayISO = new Date().toISOString().slice(0, 10);
               const ended = calPlan.status !== "active" || calPlan.end_date < todayISO;
               if (!ended) return null;
+              const stoppedEarly = calPlan.end_date >= todayISO && calPlan.status !== "active";
               return (
                 <div className="flex items-start gap-2 rounded-xl px-3 py-2.5"
                   style={{ background: "rgba(210,59,52,0.08)", border: "1px solid rgba(210,59,52,0.3)" }}>
                   <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" style={{ color: "#d23b34" }} />
                   <p className="text-xs leading-relaxed" style={{ color: "#a02c26" }}>
-                    <span className="font-semibold">This customer's plan has ended</span> on{" "}
-                    {format(new Date(calPlan.end_date + "T12:00:00"), "d MMM yyyy")}. Their past classes are shown below,
-                    with the end date ringed in red.
+                    <span className="font-semibold">
+                      {stoppedEarly ? "This customer's plan has been stopped" : "This customer's plan has ended"}
+                    </span>
+                    {!stoppedEarly && (
+                      <> on {format(new Date(calPlan.end_date + "T12:00:00"), "d MMM yyyy")}</>
+                    )}
+                    . Their past classes are shown below{!stoppedEarly ? ", with the end date ringed in red" : ""}.
                   </p>
                 </div>
               );
@@ -583,6 +588,7 @@ export function ProfileTab({ userId }: { userId: string }) {
               expanded={calExpanded}
               onExpandedChange={setCalExpanded}
               highlightDate={calPlan.end_date}
+              planActive={calPlan.status === "active"}
             />
           </div>
         ) : (

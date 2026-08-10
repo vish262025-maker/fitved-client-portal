@@ -121,12 +121,18 @@ export default function GeoLandingPage() {
           <div className="flex flex-col sm:flex-row gap-3 justify-center pt-2">
             <Button
               onClick={() => setTrialModalOpen(true)}
-              className="bg-orange-500 hover:bg-orange-600 text-white font-bold px-8 py-3 text-base shadow-lg"
+              className="bg-orange-500 hover:bg-orange-600 text-white font-bold px-6 sm:px-8 py-3 sm:py-3.5 h-auto min-h-[3rem] w-full sm:w-auto text-base leading-snug text-center whitespace-normal break-words max-w-full shadow-lg transition-all"
             >
-              <Sparkles className="mr-2 h-5 w-5" /> {page.ctaText}
+              {page.ctaText}
             </Button>
-            <Button asChild variant="outline" className="border-white/30 text-white hover:bg-white/10 font-semibold px-6 py-3">
-              <Link to="/trainers">Browse All Trainers</Link>
+            <Button
+              asChild
+              variant="outline"
+              className="bg-white hover:bg-slate-100 text-[#17233A] hover:text-[#17233A] font-bold px-6 py-3 h-auto min-h-[3rem] w-full sm:w-auto text-base border border-slate-200 shadow-sm transition-colors focus-visible:ring-2 focus-visible:ring-[#17233A]"
+            >
+              <Link to="/trainers" className="inline-flex items-center justify-center">
+                Browse All Trainers <ArrowRight className="ml-1.5 h-4 w-4 text-[#17233A]" />
+              </Link>
             </Button>
           </div>
           <div className="flex flex-wrap gap-4 justify-center text-xs text-slate-400 pt-3">

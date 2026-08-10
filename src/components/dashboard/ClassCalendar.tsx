@@ -27,6 +27,7 @@ interface Props {
   expanded: boolean;
   onExpandedChange: (v: boolean) => void;
   highlightDate?: string; // optional — rings a specific day (e.g. plan end date)
+  planActive?: boolean; // when false, future training days won't show as "upcoming"
 }
 
 type DayState = "attended" | "upcoming" | "paused" | "off" | "rest" | "outside";
@@ -49,7 +50,7 @@ export { offTimeAffectsSlot } from "@/lib/sessionPlan";
 
 interface Cell { d: number; date: string; dow: number; state: DayState; isToday: boolean }
 
-export function ClassCalendar({ startDate, endDate, trainingDays, pauses, offTimes, customerSlot, expanded, onExpandedChange, highlightDate }: Props) {
+export function ClassCalendar({ startDate, endDate, trainingDays, pauses, offTimes, customerSlot, expanded, onExpandedChange, highlightDate, planActive }: Props) {
   const today = todayLocalISO();
   const [selected, setSelected] = useState<string | null>(null);
 
@@ -68,7 +69,8 @@ export function ClassCalendar({ startDate, endDate, trainingDays, pauses, offTim
     if (offTimes.some((o) => inRange(date, o.from_date, o.to_date) && offTimeAffectsSlot(o.time_slot, customerSlot)))
       return trainingIdx.has(dow) ? "off" : "outside";
     if (!trainingIdx.has(dow)) return "rest";
-    return date < today ? "attended" : "upcoming";
+    if (date < today) return "attended";
+    return planActive !== false ? "upcoming" : "rest";
   };
 
   const makeCell = (dt: Date): Cell => {
@@ -80,7 +82,7 @@ export function ClassCalendar({ startDate, endDate, trainingDays, pauses, offTim
   // Upcoming training days cancelled by a trainer off-time (today → plan end,
   // scanned up to 60 days ahead) — surfaced as a notice above the calendar.
   const upcomingOffDates = useMemo(() => {
-    if (!offTimes.length || trainingIdx.size === 0) return [] as string[];
+    if (!offTimes.length || trainingIdx.size === 0 || planActive === false) return [] as string[];
     const res: string[] = [];
     const cursor = new Date(
       Number(today.slice(0, 4)), Number(today.slice(5, 7)) - 1, Number(today.slice(8, 10))
@@ -100,7 +102,7 @@ export function ClassCalendar({ startDate, endDate, trainingDays, pauses, offTim
     }
     return res;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [offTimes, pauses, trainingIdx, customerSlot, startDate, endDate, today]);
+  }, [offTimes, pauses, trainingIdx, customerSlot, startDate, endDate, today, planActive]);
 
   // Anchor (today clamped to the plan window) drives both the default week and month.
   const anchor = today < startDate ? startDate : today > endDate ? endDate : today;
