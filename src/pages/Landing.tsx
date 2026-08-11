@@ -2196,7 +2196,7 @@ function HomepageJournalSection() {
             <div className="pt-4 border-t border-white/10 flex items-center justify-between">
               <span className="text-xs text-white/50 font-medium">By Dr. Ananya Sharma</span>
               <Button asChild size="sm" className="bg-fv-orange hover:bg-fv-orange/90 text-white font-bold text-xs">
-                <Link to="/blog/article/100g-protein-vegetarian-indian-diet">Read Article <ArrowRight className="ml-1 h-3.5 w-3.5" /></Link>
+                <Link to="/blog/article/100g-protein-vegetarian-diet">Read Article <ArrowRight className="ml-1 h-3.5 w-3.5" /></Link>
               </Button>
             </div>
           </div>
@@ -2220,7 +2220,7 @@ function HomepageJournalSection() {
               <p className="text-xs text-white/60 line-clamp-2">Quick, delicious, low-carb Indian cottage cheese bhurji prepared with minimum oil.</p>
             </div>
             <Button asChild size="sm" variant="ghost" className="text-xs text-fv-orange hover:text-white hover:bg-fv-orange/20 self-start">
-              <Link to="/blog/recipe/high-protein-paneer-bhurji-recipe">View Recipe →</Link>
+              <Link to="/blog/recipe/protein-paneer-bhurji">View Recipe →</Link>
             </Button>
           </div>
 
@@ -2240,7 +2240,7 @@ function HomepageJournalSection() {
               <p className="text-xs text-white/60 line-clamp-2">Evidence-based strategies for managing PCOS weight gain with low-GI Indian foods.</p>
             </div>
             <Button asChild size="sm" variant="ghost" className="text-xs text-fv-orange hover:text-white hover:bg-fv-orange/20 self-start">
-              <Link to="/blog/article/pcos-weight-loss-insulin-resistance-guide">Read Guide →</Link>
+              <Link to="/blog/article/pcos-weight-loss">Read Guide →</Link>
             </Button>
           </div>
 
@@ -2260,7 +2260,7 @@ function HomepageJournalSection() {
               <p className="text-xs text-white/60 line-clamp-2">Detailed comparison evaluating cost, time savings, traffic commute, and consistency.</p>
             </div>
             <Button asChild size="sm" variant="ghost" className="text-xs text-fv-orange hover:text-white hover:bg-fv-orange/20 self-start">
-              <Link to="/blog/compare/gym-vs-home-workouts-comparison">Compare Methods →</Link>
+              <Link to="/blog/compare/gym-vs-home-workouts">Compare Methods →</Link>
             </Button>
           </div>
         </div>

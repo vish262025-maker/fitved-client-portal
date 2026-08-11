@@ -148,9 +148,9 @@ export function SEOFooter({ bgClass = "bg-slate-900 text-slate-200 border-t bord
                   key={art.id}
                   to={url}
                   className="text-slate-400 hover:text-orange-400 transition-colors truncate block py-0.5"
-                  title={art.title}
+                  title={art.display_title || art.title}
                 >
-                  • {art.title}
+                  • {art.display_title || art.title}
                 </Link>
               );
             })}

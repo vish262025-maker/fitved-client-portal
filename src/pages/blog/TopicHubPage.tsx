@@ -98,7 +98,7 @@ export default function TopicHubPage() {
                     <span>•</span>
                     <span>{art.reading_time} min read</span>
                   </div>
-                  <h4 className="text-base font-bold text-foreground group-hover:text-primary transition-colors">{art.title}</h4>
+                  <h4 className="text-base font-bold text-foreground group-hover:text-primary transition-colors">{art.display_title || art.title}</h4>
                   <p className="text-xs text-muted-foreground line-clamp-2">{art.summary}</p>
                 </div>
                 <div className="mt-4 pt-3 border-t border-border flex justify-end">

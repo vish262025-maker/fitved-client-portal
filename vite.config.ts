@@ -87,6 +87,33 @@ function serveSocieties(rootDir: string): Connect.NextHandleFunction {
   };
 }
 
+// 301 redirects for migrated blog slugs (mirrors vercel.json redirects in dev)
+function serveBlogRedirects(): Connect.NextHandleFunction {
+  let redirectMap: Record<string, string> | null = null;
+  return (req, res, next) => {
+    const url = decodeURIComponent((req.url || "").split("?")[0]);
+    const match = url.match(/^\/blog\/(article|recipe|compare)\/(.+?)$/);
+    if (!match) return next();
+
+    if (!redirectMap) {
+      try {
+        redirectMap = JSON.parse(
+          fs.readFileSync(path.resolve(__dirname, "src/data/blog/slugRedirects.json"), "utf8")
+        );
+      } catch { redirectMap = {}; }
+    }
+
+    const [, routeType, slug] = match;
+    const newSlug = redirectMap![slug];
+    if (newSlug && newSlug !== slug) {
+      res.writeHead(301, { Location: `/blog/${routeType}/${newSlug}` });
+      res.end();
+      return;
+    }
+    next();
+  };
+}
+
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => ({
   server: {
@@ -102,10 +129,12 @@ export default defineConfig(({ mode }) => ({
     {
       name: "serve-clean-urls",
       configureServer(server) {
+        server.middlewares.use(serveBlogRedirects());
         server.middlewares.use(serveCleanUrls(path.resolve(__dirname, "public")));
         server.middlewares.use(serveSocieties(path.resolve(__dirname, "public/societies")));
       },
       configurePreviewServer(server) {
+        server.middlewares.use(serveBlogRedirects());
         server.middlewares.use(serveCleanUrls(path.resolve(__dirname, "dist")));
         server.middlewares.use(serveSocieties(path.resolve(__dirname, "dist/societies")));
       },

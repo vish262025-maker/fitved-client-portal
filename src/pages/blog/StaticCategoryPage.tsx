@@ -78,7 +78,7 @@ export default function StaticCategoryPage() {
                   <span>•</span>
                   <span>{art.reading_time} min read</span>
                 </div>
-                <h3 className="text-base font-bold text-foreground group-hover:text-primary transition-colors line-clamp-2">{art.title}</h3>
+                <h3 className="text-base font-bold text-foreground group-hover:text-primary transition-colors line-clamp-2">{art.display_title || art.title}</h3>
                 <p className="text-xs text-muted-foreground line-clamp-2">{art.summary}</p>
               </div>
               <Button asChild size="sm" variant="ghost" className="mt-4 text-xs font-semibold text-primary self-end">

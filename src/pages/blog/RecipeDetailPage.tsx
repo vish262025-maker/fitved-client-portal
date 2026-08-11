@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, Navigate } from "react-router-dom";
 import { ARTICLES_DATA } from "@/data/blog/articles";
+import slugRedirects from "@/data/blog/slugRedirects.json";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -20,6 +21,9 @@ export default function RecipeDetailPage() {
   const { slug } = useParams<{ slug: string }>();
   const [trialModalOpen, setTrialModalOpen] = useState(false);
   const [checkedIngredients, setCheckedIngredients] = useState<Record<number, boolean>>({});
+
+  const redirectTarget = slug ? (slugRedirects as Record<string, string>)[slug] : undefined;
+  if (redirectTarget) return <Navigate to={`/blog/recipe/${redirectTarget}`} replace />;
 
   const article = useMemo(() => {
     const found = ARTICLES_DATA.find((a) => a.slug === slug && a.recipe_details);
@@ -47,7 +51,7 @@ export default function RecipeDetailPage() {
   const breadcrumbs = [
     { name: "Home", url: "/" },
     { name: "FitVed Journal", url: "/blog" },
-    { name: article.title, url: `/blog/recipe/${article.slug}` },
+    { name: article.display_title || article.title, url: `/blog/recipe/${article.slug}` },
   ];
   const recipeSchema = generateRecipeSchema(article, recipe);
   if (recipeSchema) recipeSchema.image = [featuredImage];
@@ -82,7 +86,7 @@ export default function RecipeDetailPage() {
           </div>
 
           <h1 className="text-3xl sm:text-4xl md:text-5xl font-extrabold text-white">
-            {article.title}
+            {article.display_title || article.title}
           </h1>
 
           <p className="text-sm sm:text-base text-slate-300 max-w-2xl">

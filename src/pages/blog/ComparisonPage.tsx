@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, Navigate } from "react-router-dom";
 import { ARTICLES_DATA } from "@/data/blog/articles";
+import slugRedirects from "@/data/blog/slugRedirects.json";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Scale, Check, X, ArrowLeft, Sparkles, Trophy } from "lucide-react";
@@ -17,6 +18,9 @@ import { AUTHORS_DATA } from "@/data/blog/authors";
 export default function ComparisonPage() {
   const { slug } = useParams<{ slug: string }>();
   const [trialModalOpen, setTrialModalOpen] = useState(false);
+
+  const redirectTarget = slug ? (slugRedirects as Record<string, string>)[slug] : undefined;
+  if (redirectTarget) return <Navigate to={`/blog/compare/${redirectTarget}`} replace />;
 
   const article = useMemo(() => {
     const found = ARTICLES_DATA.find((a) => a.slug === slug && a.comparison_details);
@@ -41,7 +45,7 @@ export default function ComparisonPage() {
   const breadcrumbs = [
     { name: "Home", url: "/" },
     { name: "FitVed Journal", url: "/blog" },
-    { name: article.title, url: `/blog/compare/${article.slug}` },
+    { name: article.display_title || article.title, url: `/blog/compare/${article.slug}` },
   ];
   const articleSchema = generateArticleSchema(article, author);
   if (articleSchema) articleSchema.image = [featuredImage];
@@ -66,7 +70,7 @@ export default function ComparisonPage() {
             Head-to-Head Comparison Guide
           </Badge>
           <h1 className="text-3xl sm:text-4xl md:text-5xl font-extrabold text-white">
-            {article.title}
+            {article.display_title || article.title}
           </h1>
           <p className="text-sm sm:text-base text-slate-300 max-w-2xl mx-auto">
             {article.summary}

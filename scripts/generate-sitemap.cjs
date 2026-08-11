@@ -7,16 +7,16 @@
 const fs = require("fs");
 const path = require("path");
 
-const SITE_URL = "https://getfitved.com";
+const SITE_URL = "https://www.getfitved.com";
 const today = new Date().toISOString().split("T")[0];
 
 // The 4 detailed curated articles live in articles.ts (TS), so their slugs are
 // listed here explicitly. Everything else comes from the JSON.
 const CURATED_SLUGS = [
-  { slug: "100g-protein-vegetarian-indian-diet", type: "article" },
-  { slug: "high-protein-paneer-bhurji-recipe", type: "recipe" },
-  { slug: "gym-vs-home-workouts-comparison", type: "compare" },
-  { slug: "pcos-weight-loss-insulin-resistance-guide", type: "article" },
+  { slug: "100g-protein-vegetarian-diet", type: "article" },
+  { slug: "protein-paneer-bhurji", type: "recipe" },
+  { slug: "gym-vs-home-workouts", type: "compare" },
+  { slug: "pcos-weight-loss", type: "article" },
 ];
 
 const researched = require("../src/data/blog/researchedArticles.json");
@@ -102,65 +102,20 @@ researched.forEach((a) => {
   urls.push(urlEntry(`${SITE_URL}${articlePath(a)}`, "0.7", "monthly", lastmod));
 });
 
-// Programmatic catalogue articles — mirror the title templates + variations in
-// src/data/blog/articles.ts generateProgrammaticArticles() so every published
-// article appears in the sitemap. Keep these two lists in sync.
-const PROG_TITLE_TEMPLATES = [
-  "Complete Indian Diet Guide for {topic}",
-  "How to Lose Belly Fat with Indian Home Food: {topic}",
-  "Hypertrophy & Muscle Building Protocol for {topic}",
-  "Top High Protein Foods for {topic} in India",
-  "High Protein Quick Recipe for {topic}",
-  "Scientific Supplement Guide for {topic}",
-  "Essential Women's Health Strategy for {topic}",
-  "PCOS Reversal & Diet Protocols for {topic}",
-  "Managing Blood Sugar & HbA1c with {topic}",
-  "Cardiovascular Health & Lipid Profile Guide: {topic}",
-  "Anti-Aging & Cellular Vitality via {topic}",
-  "Sleep Optimization & Circadian Recovery for {topic}",
-  "Cortisol Reduction & Mindfulness Guide for {topic}",
-  "Office Ergonomics & Desk Fitness for {topic}",
-  "No-Equipment Home Workout Protocol for {topic}",
-  "Barbell & Machine Setup Guide for {topic}",
-  "Pranayama & Asana Flow for {topic}",
-  "5k & 10k Endurance Running Strategy for {topic}",
-  "Hip & Shoulder Mobility Drills for {topic}",
-  "DOMS Relief & Muscle Recovery Protocols for {topic}",
-  "Lower Back & Knee Rehab Exercises for {topic}",
-  "Creatine Monohydrate Loading & Dosage Guide for {topic}",
-  "Whey Concentrate vs Isolate Comparison for {topic}",
-  "Vitamin D3 & B12 Deficiency Guide for {topic}",
-  "Caloric Deficit & Metabolism Boost for {topic}",
-  "Step-by-Step Beginner Fitness Blueprint for {topic}",
-  "Active Aging & Bone Density Workout for {topic}",
-  "Childhood Growth & Healthy Tiffin Hacks for {topic}",
-  "Executive Health & Corporate Fitness for {topic}",
-  "Safe Trimester Workout & Prenatal Care for {topic}",
-  "Diastasis Recti & Core Rehabilitation for {topic}",
-  "Testosterone Boosting & Male Fitness for {topic}",
-  "Probiotics & Bloating Cure in Indian Diets for {topic}",
-  "Macro-Balanced South & North Indian Thali Guide for {topic}",
-  "Nutritional Deep-Dive on Dosa, Idli, & Sattu for {topic}",
-  "7-Day Indian Meal Prep Schedule for {topic}",
-  "Head to Head Analysis: {topic}",
-  "How to Use Caloric & Macro Calculators for {topic}",
-  "At-Home Personal Fitness Coaching in {topic} Bangalore",
-  "Maintaining Indian Meals & Fitness Abroad for {topic}",
-  "Habit Stacking & 30-Day Consistency Rule for {topic}",
-  "Decoding Peer-Reviewed Exercise Research for {topic}",
-];
+// Programmatic catalogue articles — read SEO slugs from the same JSON used by
+// articles.ts so the sitemap can never drift from the runtime article data.
+const SEO_SLUG_MAP = require("../src/data/blog/seoSlugs.json");
 const PROG_VARIATIONS = [
   "Busy IT Professionals", "Vegetarians", "Beginners Over 30", "Desk Workers",
   "Post-Workout Recovery", "Fat Burning", "Hormonal Balance", "Metabolic Flexibility",
   "Muscle Retention", "Energy Boost", "Night Shift Workers", "Budget Meal Planning",
 ];
-function slugify(title) {
-  return title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
-}
-PROG_TITLE_TEMPLATES.forEach((tpl) => {
+Object.entries(SEO_SLUG_MAP).forEach(([catSlug, varMap]) => {
   PROG_VARIATIONS.forEach((v) => {
-    const slug = slugify(tpl.replace("{topic}", v));
-    urls.push(urlEntry(`${SITE_URL}/blog/article/${slug}`, "0.5", "monthly"));
+    const slug = varMap[v];
+    if (slug) {
+      urls.push(urlEntry(`${SITE_URL}/blog/article/${slug}`, "0.5", "monthly"));
+    }
   });
 });
 

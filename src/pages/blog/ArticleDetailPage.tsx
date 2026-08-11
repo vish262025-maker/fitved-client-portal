@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, Navigate } from "react-router-dom";
 import { ARTICLES_DATA } from "@/data/blog/articles";
+import slugRedirects from "@/data/blog/slugRedirects.json";
 import { AUTHORS_DATA } from "@/data/blog/authors";
 import { BlogArticle } from "@/lib/blog/types";
 import { BlogLayout } from "@/components/blog/BlogLayout";
@@ -24,7 +25,9 @@ export default function ArticleDetailPage() {
   const [copied, setCopied] = useState(false);
   const [trialModalOpen, setTrialModalOpen] = useState(false);
 
-  // Find static article from 508 articles dataset cleanly with useMemo
+  const redirectTarget = slug ? (slugRedirects as Record<string, string>)[slug] : undefined;
+  if (redirectTarget) return <Navigate to={`/blog/article/${redirectTarget}`} replace />;
+
   const { article, author, prevArticle, nextArticle, relatedArticles } = React.useMemo(() => {
     const idx = ARTICLES_DATA.findIndex((a) => a.slug === slug);
     const foundArt = idx !== -1 ? ARTICLES_DATA[idx] : ARTICLES_DATA[0];
@@ -61,7 +64,7 @@ export default function ArticleDetailPage() {
   const breadcrumbs = [
     { name: "Home", url: "/" },
     { name: "FitVed Journal", url: "/blog" },
-    { name: article.title, url: `/blog/article/${article.slug}` },
+    { name: article.display_title || article.title, url: `/blog/article/${article.slug}` },
   ];
 
   const articleSchema = generateArticleSchema(article, author);
@@ -105,7 +108,7 @@ export default function ArticleDetailPage() {
           </div>
 
           <h1 className="text-3xl sm:text-4xl md:text-5xl font-black tracking-tight text-foreground leading-tight">
-            {article.title}
+            {article.display_title || article.title}
           </h1>
 
           <p className="text-base sm:text-lg text-muted-foreground leading-relaxed">
@@ -204,14 +207,14 @@ export default function ArticleDetailPage() {
           {prevArticle ? (
             <Link to={`/blog/article/${prevArticle.slug}`} className="p-4 rounded-2xl border border-border bg-card hover:border-primary transition-all space-y-1 text-left">
               <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1"><ArrowLeft className="h-3 w-3" /> Previous Article</span>
-              <p className="text-xs font-bold text-foreground line-clamp-1">{prevArticle.title}</p>
+              <p className="text-xs font-bold text-foreground line-clamp-1">{prevArticle.display_title || prevArticle.title}</p>
             </Link>
           ) : <div />}
 
           {nextArticle ? (
             <Link to={`/blog/article/${nextArticle.slug}`} className="p-4 rounded-2xl border border-border bg-card hover:border-primary transition-all space-y-1 text-right sm:text-right">
               <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground justify-end flex items-center gap-1">Next Article <ArrowRight className="h-3 w-3" /></span>
-              <p className="text-xs font-bold text-foreground line-clamp-1">{nextArticle.title}</p>
+              <p className="text-xs font-bold text-foreground line-clamp-1">{nextArticle.display_title || nextArticle.title}</p>
             </Link>
           ) : <div />}
         </div>
@@ -249,7 +252,7 @@ export default function ArticleDetailPage() {
                     <div className="aspect-video rounded-xl overflow-hidden bg-muted">
                       <img src={resolveFeaturedImage(rel)} alt={resolveImageAltText(rel)} loading="lazy" className="h-full w-full object-cover group-hover:scale-105 transition-transform" onError={(e) => { (e.target as HTMLImageElement).src = "https://images.unsplash.com/photo-1589301760014-d929f3979dbc?w=1200&q=80"; }} />
                     </div>
-                    <h4 className="text-sm font-bold text-foreground group-hover:text-primary transition-colors line-clamp-2">{rel.title}</h4>
+                    <h4 className="text-sm font-bold text-foreground group-hover:text-primary transition-colors line-clamp-2">{rel.display_title || rel.title}</h4>
                   </div>
                   <Button asChild size="sm" variant="ghost" className="mt-3 text-xs font-semibold text-primary self-end">
                     <Link to={`/blog/article/${rel.slug}`}>Read <ArrowRight className="ml-1 h-3 w-3" /></Link>

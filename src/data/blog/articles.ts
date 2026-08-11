@@ -1,12 +1,16 @@
 import { BlogArticle } from "@/lib/blog/types";
+import { getEditorialDisplayTitle } from "@/lib/blog/editorialTitles";
 import { CATEGORIES_DATA } from "./categories";
 import researchedRaw from "./researchedArticles.json";
+import seoSlugMapRaw from "./seoSlugs.json";
 
 // Real, hand-researched articles are the primary blog content. Stored as JSON
 // so the sitemap generator (scripts/generate-sitemap.cjs) can read the exact
 // same source without a TS toolchain — one source of truth for slugs.
 const RESEARCHED_ARTICLES = researchedRaw as unknown as BlogArticle[];
 import { resolveFeaturedImage } from "@/lib/blog/featuredImageMap";
+
+const SEO_SLUG_MAP: Record<string, Record<string, string>> = seoSlugMapRaw;
 
 // Expanded content upgrades thin programmatic articles to premium guides.
 // Each JSON maps slug → { summary, reading_time, seo_title, seo_description, keywords, image_alt, content, faq_schema }
@@ -17,8 +21,45 @@ import proteinExpanded from "./expanded/protein.json";
 import recipesExpanded from "./expanded/recipes.json";
 import supplementsExpanded from "./expanded/supplements.json";
 import womensHealthExpanded from "./expanded/womens-health.json";
+import beginnerGuidesExpanded from "./expanded/beginner-guides.json";
+import fatLossExpanded from "./expanded/fat-loss.json";
+import pcosExpanded from "./expanded/pcos.json";
+import seniorFitnessExpanded from "./expanded/senior-fitness.json";
+import vitaminsExpanded from "./expanded/vitamins.json";
+import wheyProteinExpanded from "./expanded/whey-protein.json";
+// Phase 2: 29 newly generated topic files
+import diabetesExpanded from "./expanded/diabetes.json";
+import heartHealthExpanded from "./expanded/heart-health.json";
+import longevityExpanded from "./expanded/longevity.json";
+import sleepExpanded from "./expanded/sleep.json";
+import stressExpanded from "./expanded/stress.json";
+import workplaceFitnessExpanded from "./expanded/workplace-fitness.json";
+import homeWorkoutsExpanded from "./expanded/home-workouts.json";
+import gymExpanded from "./expanded/gym.json";
+import yogaExpanded from "./expanded/yoga.json";
+import runningExpanded from "./expanded/running.json";
+import mobilityExpanded from "./expanded/mobility.json";
+import recoveryExpanded from "./expanded/recovery.json";
+import injuriesExpanded from "./expanded/injuries.json";
+import creatineExpanded from "./expanded/creatine.json";
+import corporateWellnessExpanded from "./expanded/corporate-wellness.json";
+import pregnancyExpanded from "./expanded/pregnancy.json";
+import postpartumExpanded from "./expanded/postpartum.json";
+import mensHealthExpanded from "./expanded/mens-health.json";
+import gutHealthExpanded from "./expanded/gut-health.json";
+import indianDietsExpanded from "./expanded/indian-diets.json";
+import regionalIndianFoodsExpanded from "./expanded/regional-indian-foods.json";
+import mealPlansExpanded from "./expanded/meal-plans.json";
+import comparisonsExpanded from "./expanded/comparisons.json";
+import calculatorsExpanded from "./expanded/calculators.json";
+import bangaloreLocalGuidesExpanded from "./expanded/bangalore-local-guides.json";
+import nriFitnessExpanded from "./expanded/nri-fitness.json";
+import healthyHabitsExpanded from "./expanded/healthy-habits.json";
+import fitnessScienceExpanded from "./expanded/fitness-science.json";
+import kidsNutritionExpanded from "./expanded/kids-nutrition.json";
 
 const EXPANDED_CONTENT: Record<string, any> = {
+  // Original 13 topics
   ...nutritionExpanded,
   ...weightLossExpanded,
   ...muscleGainExpanded,
@@ -26,6 +67,42 @@ const EXPANDED_CONTENT: Record<string, any> = {
   ...recipesExpanded,
   ...supplementsExpanded,
   ...womensHealthExpanded,
+  ...beginnerGuidesExpanded,
+  ...fatLossExpanded,
+  ...pcosExpanded,
+  ...seniorFitnessExpanded,
+  ...vitaminsExpanded,
+  ...wheyProteinExpanded,
+  // 29 newly generated topics
+  ...diabetesExpanded,
+  ...heartHealthExpanded,
+  ...longevityExpanded,
+  ...sleepExpanded,
+  ...stressExpanded,
+  ...workplaceFitnessExpanded,
+  ...homeWorkoutsExpanded,
+  ...gymExpanded,
+  ...yogaExpanded,
+  ...runningExpanded,
+  ...mobilityExpanded,
+  ...recoveryExpanded,
+  ...injuriesExpanded,
+  ...creatineExpanded,
+  ...corporateWellnessExpanded,
+  ...pregnancyExpanded,
+  ...postpartumExpanded,
+  ...mensHealthExpanded,
+  ...gutHealthExpanded,
+  ...indianDietsExpanded,
+  ...regionalIndianFoodsExpanded,
+  ...mealPlansExpanded,
+  ...comparisonsExpanded,
+  ...calculatorsExpanded,
+  ...bangaloreLocalGuidesExpanded,
+  ...nriFitnessExpanded,
+  ...healthyHabitsExpanded,
+  ...fitnessScienceExpanded,
+  ...kidsNutritionExpanded,
 };
 
 // Seed / Initial Curated Core Articles (High-Detail Articles)
@@ -33,9 +110,10 @@ const CURATED_ARTICLES: BlogArticle[] = [
   {
     id: "art-1",
     title: "How to Get 100g Protein Daily on a Pure Vegetarian Indian Diet",
-    slug: "100g-protein-vegetarian-indian-diet",
+    display_title: "How to Get 100g Protein on a Vegetarian Diet",
+    slug: "100g-protein-vegetarian-diet",
     summary: "Discover exact meal charts, protein density tables, and daily meal plans using paneer, soya, sattu, lentils, and dairy.",
-    featured_image: resolveFeaturedImage({ title: "How to Get 100g Protein Daily on a Pure Vegetarian Indian Diet", slug: "100g-protein-vegetarian-indian-diet" }),
+    featured_image: resolveFeaturedImage({ title: "How to Get 100g Protein Daily on a Pure Vegetarian Indian Diet", slug: "100g-protein-vegetarian-diet" }),
     published_at: "2026-07-25T10:00:00Z",
     updated_at: "2026-08-01T12:00:00Z",
     reading_time: 7,
@@ -48,7 +126,7 @@ const CURATED_ARTICLES: BlogArticle[] = [
     published: true,
     seo_title: "100g Protein Vegetarian Indian Diet Chart & Meal Plan | FitVed",
     seo_description: "Learn how to get 100 grams of high-quality protein on an Indian vegetarian diet using paneer, soya, dahi, and sattu with exact macro tables.",
-    canonical_url: "https://fitved.com/blog/article/100g-protein-vegetarian-indian-diet",
+    canonical_url: "https://www.getfitved.com/blog/article/100g-protein-vegetarian-diet",
     topic_hub_slug: "high-protein-indian-diet",
     content: {
       keyTakeaways: [
@@ -110,9 +188,10 @@ const CURATED_ARTICLES: BlogArticle[] = [
   {
     id: "art-2",
     title: "High Protein Paneer Bhurji Recipe (32g Protein in 15 Mins)",
-    slug: "high-protein-paneer-bhurji-recipe",
+    display_title: "Protein Paneer Bhurji in 15 Minutes",
+    slug: "protein-paneer-bhurji",
     summary: "Quick, delicious, and low-carb Indian paneer bhurji prepared with minimum oil, packed with 32g protein.",
-    featured_image: resolveFeaturedImage({ title: "High Protein Paneer Bhurji Recipe (32g Protein in 15 Mins)", slug: "high-protein-paneer-bhurji-recipe" }),
+    featured_image: resolveFeaturedImage({ title: "High Protein Paneer Bhurji Recipe (32g Protein in 15 Mins)", slug: "protein-paneer-bhurji" }),
     published_at: "2026-07-28T09:00:00Z",
     updated_at: "2026-08-02T10:00:00Z",
     reading_time: 5,
@@ -125,7 +204,7 @@ const CURATED_ARTICLES: BlogArticle[] = [
     published: true,
     seo_title: "High Protein Paneer Bhurji Recipe (32g Protein) | FitVed",
     seo_description: "Learn how to make low-fat High Protein Paneer Bhurji in 15 minutes with exact calorie and macro nutrition breakdown.",
-    canonical_url: "https://fitved.com/blog/article/high-protein-paneer-bhurji-recipe",
+    canonical_url: "https://www.getfitved.com/blog/recipe/protein-paneer-bhurji",
     recipe_details: {
       prep_time_mins: 5,
       cook_time_mins: 10,
@@ -170,9 +249,10 @@ const CURATED_ARTICLES: BlogArticle[] = [
   {
     id: "art-3",
     title: "Gym vs Home Workouts: Which is Better for Indian Working Professionals?",
-    slug: "gym-vs-home-workouts-comparison",
+    display_title: "Gym vs Home Workouts for Working Professionals",
+    slug: "gym-vs-home-workouts",
     summary: "Detailed comparison evaluating cost, time savings, equipment, privacy, and long-term consistency for home vs gym training.",
-    featured_image: resolveFeaturedImage({ title: "Gym vs Home Workouts: Which is Better for Indian Working Professionals?", slug: "gym-vs-home-workouts-comparison" }),
+    featured_image: resolveFeaturedImage({ title: "Gym vs Home Workouts: Which is Better for Indian Working Professionals?", slug: "gym-vs-home-workouts" }),
     published_at: "2026-07-29T11:00:00Z",
     updated_at: "2026-08-03T14:00:00Z",
     reading_time: 6,
@@ -185,7 +265,7 @@ const CURATED_ARTICLES: BlogArticle[] = [
     published: true,
     seo_title: "Gym vs Home Workouts Comparison for Working Professionals | FitVed",
     seo_description: "Compare Gym vs Home Personal Training on cost, commute time, consistency, and privacy for Indian professionals.",
-    canonical_url: "https://fitved.com/blog/article/gym-vs-home-workouts-comparison",
+    canonical_url: "https://www.getfitved.com/blog/compare/gym-vs-home-workouts",
     comparison_details: {
       optionA: {
         name: "At-Home Personal Training",
@@ -236,9 +316,10 @@ const CURATED_ARTICLES: BlogArticle[] = [
   {
     id: "art-4",
     title: "PCOS Weight Loss Guide: How to Reverse Insulin Resistance Naturally",
-    slug: "pcos-weight-loss-insulin-resistance-guide",
+    display_title: "PCOS & Weight Loss: What Actually Helps",
+    slug: "pcos-weight-loss",
     summary: "Comprehensive evidence-based strategy for women managing PCOS, hormonal acne, weight gain, and irregular cycles through targeted diet & exercise.",
-    featured_image: resolveFeaturedImage({ title: "PCOS Weight Loss Guide: How to Reverse Insulin Resistance Naturally", slug: "pcos-weight-loss-insulin-resistance-guide" }),
+    featured_image: resolveFeaturedImage({ title: "PCOS Weight Loss Guide: How to Reverse Insulin Resistance Naturally", slug: "pcos-weight-loss" }),
     published_at: "2026-07-30T08:00:00Z",
     updated_at: "2026-08-04T09:00:00Z",
     reading_time: 8,
@@ -251,7 +332,7 @@ const CURATED_ARTICLES: BlogArticle[] = [
     published: true,
     seo_title: "PCOS Weight Loss & Insulin Resistance Guide | FitVed",
     seo_description: "Learn how to manage PCOS weight gain, reduce insulin resistance with low-GI Indian foods and resistance training.",
-    canonical_url: "https://fitved.com/blog/article/pcos-weight-loss-insulin-resistance-guide",
+    canonical_url: "https://www.getfitved.com/blog/article/pcos-weight-loss",
     topic_hub_slug: "pcos-hormone-health",
     content: {
       keyTakeaways: [
@@ -352,10 +433,8 @@ function generateProgrammaticArticles(): BlogArticle[] {
   topicTemplates.forEach((template) => {
     variations.forEach((varItem) => {
       const title = template.title.replace("{topic}", varItem);
-      const slug = title
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, "-")
-        .replace(/(^-|-$)/g, "");
+      const catSlugs = SEO_SLUG_MAP[template.catSlug];
+      const slug = catSlugs?.[varItem] || title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
 
       const catObj = CATEGORIES_DATA.find((c) => c.slug === template.catSlug);
       const catId = catObj ? catObj.id : "cat-1";
@@ -430,6 +509,7 @@ function generateProgrammaticArticles(): BlogArticle[] {
       generated.push({
         id: `art-${idCounter}`,
         title,
+        display_title: expanded?.display_title || getEditorialDisplayTitle(template.catSlug, varItem, title),
         slug,
         summary: expanded?.summary || `Comprehensive science-backed guide on ${title}. Learn actionable steps, Indian meal charts, and workout strategies calibrated for long-term health.`,
         featured_image: resolveFeaturedImage({ title, slug }),

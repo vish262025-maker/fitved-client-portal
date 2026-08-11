@@ -158,7 +158,7 @@ export default function BlogLanding() {
                 </div>
 
                 <h2 className="text-2xl sm:text-3xl font-extrabold text-foreground leading-tight group-hover:text-primary transition-colors">
-                  {featuredArticle.title}
+                  {featuredArticle.display_title || featuredArticle.title}
                 </h2>
 
                 <p className="text-sm text-muted-foreground line-clamp-3">
@@ -268,7 +268,7 @@ export default function BlogLanding() {
                     </div>
 
                     <h3 className="text-base font-bold text-foreground line-clamp-2 group-hover:text-primary transition-colors">
-                      {art.title}
+                      {art.display_title || art.title}
                     </h3>
 
                     <p className="text-xs text-muted-foreground line-clamp-2">{art.summary}</p>

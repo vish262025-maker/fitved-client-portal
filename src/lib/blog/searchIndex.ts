@@ -21,7 +21,7 @@ export function searchStaticArticles(query: string, categorySlug?: string, tag?:
 
     if (!q) return true;
 
-    const matchTitle = art.title.toLowerCase().includes(q);
+    const matchTitle = art.title.toLowerCase().includes(q) || (art.display_title && art.display_title.toLowerCase().includes(q));
     const matchSummary = art.summary.toLowerCase().includes(q);
     const matchTags = art.tags.some((t) => t.toLowerCase().includes(q));
     const matchSlug = art.slug.toLowerCase().includes(q);

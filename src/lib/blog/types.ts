@@ -85,6 +85,7 @@ export interface ContentBlock {
 export interface BlogArticle {
   id: string;
   title: string;
+  display_title?: string;
   slug: string;
   summary: string;
   content: {
