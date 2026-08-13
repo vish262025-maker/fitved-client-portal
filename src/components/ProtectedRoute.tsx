@@ -9,7 +9,7 @@ interface Props {
 }
 
 export function ProtectedRoute({ children, allow }: Props) {
-  const { user, role, loading, roleLoading } = useAuth();
+  const { user, role, loading, roleLoading, impersonating, exitImpersonation } = useAuth();
   const location = useLocation();
 
   // Wait for BOTH session and role before rendering anything —
@@ -25,6 +25,12 @@ export function ProtectedRoute({ children, allow }: Props) {
   if (!user) return <Navigate to="/login" state={{ from: location }} replace />;
 
   if (allow && role && !allow.includes(role)) {
+    // Browser-back from an impersonated admin dashboard to a super_admin route:
+    // auto-restore the SA session so the navigation succeeds instead of looping.
+    if (impersonating && allow.includes("super_admin")) {
+      exitImpersonation();
+      return null;
+    }
     return <Navigate to={homeForRole(role)} replace />;
   }
 

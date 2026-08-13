@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
+import { trackAdminActivity } from "@/lib/adminActivity";
 import { formatDate } from "@/lib/dates";
 import { Trash2 } from "lucide-react";
 
@@ -43,6 +44,7 @@ export function BillingTab({ userId }: { userId: string }) {
     },
     onSuccess: () => {
       toast.success(billingType === "refund" ? "Refund recorded" : "Payment recorded");
+      trackAdminActivity({ action: billingType === "refund" ? "billing.refund" : "billing.payment", entityType: "customer", entityId: userId, details: { amount, method } });
       setAmount(""); setMethod(""); setNotes(""); setBillingType("payment");
       qc.invalidateQueries({ queryKey: ["customer-billing", userId] });
       qc.invalidateQueries({ queryKey: ["admin-dashboard"] });

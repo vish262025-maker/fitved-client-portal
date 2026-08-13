@@ -26,6 +26,10 @@ import Trainers from "./pages/admin/Trainers";
 import Societies from "./pages/admin/Societies";
 import Marketing from "./pages/admin/Marketing";
 import AdminReferrals from "./pages/admin/Referrals";
+import SuperAdmin from "./pages/admin/SuperAdmin";
+import AdminProfile from "./pages/admin/AdminProfile";
+import SuperAdminRequests from "./pages/admin/SuperAdminRequests";
+import SuperAdminLogin from "./pages/SuperAdminLogin";
 import Corporate from "./pages/Corporate";
 import FaqsPage from "./pages/FaqsPage";
 import TrainerDashboard from "./pages/TrainerDashboard";
@@ -87,6 +91,8 @@ const App = () => (
               <Route path="/trainer/login" element={<Login />} />
               <Route path="/trainer/signin" element={<Login />} />
               <Route path="/trainer/signup" element={<Login />} />
+              {/* Hidden Super Admin login — unlinked, direct URL only. */}
+              <Route path="/super-admin/login" element={<SuperAdminLogin />} />
               {/* Firebase email-link lands on /__/auth/action — redirect to
                   /signup so the existing isSignInWithEmailLink handler picks it up.
                   Query params (apiKey, oobCode, mode, continueUrl) are preserved. */}
@@ -129,6 +135,11 @@ const App = () => (
                 <Route path="/admin/societies" element={<ProtectedRoute allow={["admin"]}><Societies /></ProtectedRoute>} />
                 <Route path="/admin/marketing" element={<ProtectedRoute allow={["admin"]}><Marketing /></ProtectedRoute>} />
                 <Route path="/admin/referrals" element={<ProtectedRoute allow={["admin"]}><AdminReferrals /></ProtectedRoute>} />
+
+                {/* Super Admin */}
+                <Route path="/super-admin" element={<ProtectedRoute allow={["super_admin"]}><SuperAdmin /></ProtectedRoute>} />
+                <Route path="/super-admin/requests" element={<ProtectedRoute allow={["super_admin"]}><SuperAdminRequests /></ProtectedRoute>} />
+                <Route path="/super-admin/admins/:id" element={<ProtectedRoute allow={["super_admin"]}><AdminProfile /></ProtectedRoute>} />
               </Route>
               <Route path="/index" element={<Navigate to="/dashboard" replace />} />
               <Route path="/corporate" element={<Corporate />} />

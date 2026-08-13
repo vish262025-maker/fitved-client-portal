@@ -1,4 +1,4 @@
-export type AppRole = "client" | "trainer" | "admin";
+export type AppRole = "client" | "trainer" | "admin" | "super_admin";
 
 /** The single source of truth for where each role lands after login. */
 export function homeForRole(role: AppRole | null): string {
@@ -7,6 +7,8 @@ export function homeForRole(role: AppRole | null): string {
       return "/trainer";
     case "admin":
       return "/admin";
+    case "super_admin":
+      return "/super-admin";
     default:
       return "/dashboard";
   }

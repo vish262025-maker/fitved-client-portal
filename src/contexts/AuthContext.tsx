@@ -15,9 +15,10 @@ import {
   type User as FirebaseUser,
 } from "firebase/auth";
 import { normalizePhone } from "@/lib/phoneAuth";
+import type { AdminPermissions, AdminPermissionKey } from "@/lib/permissions";
 import { toast } from "sonner";
 
-type AppRole = "client" | "trainer" | "admin";
+type AppRole = "client" | "trainer" | "admin" | "super_admin";
 
 interface AuthContextValue {
   user: User | null;
@@ -30,6 +31,22 @@ interface AuthContextValue {
   signInWithPhone: (phone: string, dob: Date) => Promise<{ error: string | null }>;
   signUpWithPhone: (name: string, phone: string, dob: Date, email: string) => Promise<{ error: string | null }>;
   signInAdmin: (phone: string, passwordText: string) => Promise<{ error: string | null }>;
+  // Super Admin is a separate account (super_admins table) with its own login.
+  signInSuperAdmin: (phone: string, passwordText: string) => Promise<{ error: string | null }>;
+  // Whether the current session is the Super Admin.
+  isSuperAdmin: boolean;
+  // Super Admin "view as admin": open a specific admin's dashboard by switching
+  // into their session, remembering the SA session so it can be restored.
+  viewAsAdmin: (admin: { id: string; name: string | null; permissions: AdminPermissions | null }) => void;
+  exitImpersonation: () => void;
+  // True while the Super Admin is viewing an admin's dashboard.
+  impersonating: boolean;
+  // Per-admin permission map. `null` means "unknown / legacy" (migration not run)
+  // and is treated as full access by `can()` so existing behavior is preserved.
+  permissions: AdminPermissions | null;
+  // Gate a destructive admin action. Super Admin → always allowed; legacy admin
+  // (no permissions loaded) → allowed; otherwise the explicit grant is checked.
+  can: (key: AdminPermissionKey) => boolean;
   // Customer email verification (Firebase email link — clicking it returns
   // to continueUrl in the app; it does NOT log into the app by itself).
   // Used by the signup wizard (/signup) and the add-email card (/dashboard).
@@ -51,6 +68,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Auth sessions, so this is always null.
   const [session] = useState<Session | null>(null);
   const [role, setRole] = useState<AppRole | null>(null);
+  const [permissions, setPermissions] = useState<AdminPermissions | null>(null);
+  const [impersonating, setImpersonating] = useState(false);
   const [loading, setLoading] = useState(true);
   const [roleLoading, setRoleLoading] = useState(true);
 
@@ -62,10 +81,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // the credential layer only; its own session never logs into the app.
     const customUserId = localStorage.getItem("fitved_custom_user");
     const customRole = localStorage.getItem("fitved_custom_role");
+    const permsRaw = localStorage.getItem("fitved_admin_permissions");
     if (customUserId) {
       setUser({ id: customUserId } as User);
       setRole((customRole as AppRole) || "client");
+      if (permsRaw) {
+        try { setPermissions(JSON.parse(permsRaw)); } catch { setPermissions(null); }
+      }
     }
+    setImpersonating(!!localStorage.getItem("fitved_sa_backup"));
     setRoleLoading(false);
     setLoading(false);
   }, []);
@@ -376,24 +400,96 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { error: null };
   }, []);
 
+  // Regular admin sign-in against the `admins` table. Always a normal admin —
+  // the Super Admin is a SEPARATE account (see signInSuperAdmin). We also load
+  // the admin's permission map to gate destructive actions; if the permissions
+  // column doesn't exist yet (migration not run), fall back to a legacy select
+  // so login keeps working and the admin retains full access.
   const signInAdmin = useCallback(async (phone: string, passwordText: string) => {
     const normalized = normalizePhone(phone);
 
-    const { data, error } = await supabase
+    let adminId: string | null = null;
+    let adminName: string | null = null;
+    let perms: AdminPermissions | null = null;
+
+    const rich = await (supabase as any)
       .from("admins")
+      .select("id, name, permissions, active")
+      .eq("phone", normalized)
+      .eq("password", passwordText)
+      .maybeSingle();
+
+    if (rich.error) {
+      const { data, error } = await supabase
+        .from("admins")
+        .select("id, name")
+        .eq("phone", normalized)
+        .eq("password", passwordText)
+        .maybeSingle();
+      if (error || !data) return { error: "Invalid admin credentials." };
+      adminId = data.id;
+      adminName = (data as { name?: string }).name ?? null;
+    } else {
+      if (!rich.data) return { error: "Invalid admin credentials." };
+      // Suspended admins can't sign in (the `active` column may be absent on
+      // older DBs — treat missing as active so legacy logins keep working).
+      if (rich.data.active === false) {
+        return { error: "Your admin access has been suspended. Contact the Super Admin." };
+      }
+      adminId = rich.data.id;
+      adminName = rich.data.name ?? null;
+      perms = rich.data.permissions && typeof rich.data.permissions === "object"
+        ? (rich.data.permissions as AdminPermissions)
+        : null;
+    }
+
+    localStorage.setItem("fitved_custom_user", adminId!);
+    localStorage.setItem("fitved_custom_role", "admin");
+    localStorage.setItem("fitved_actor_name", adminName || "Admin");
+    if (perms) localStorage.setItem("fitved_admin_permissions", JSON.stringify(perms));
+    else localStorage.removeItem("fitved_admin_permissions");
+
+    // Record the sign-in (best-effort; never blocks login).
+    void (async () => {
+      try {
+        await (supabase as any).from("admin_logins").insert({ admin_id: adminId, actor_role: "admin" });
+        await (supabase as any).from("admins").update({ last_login_at: new Date().toISOString() }).eq("id", adminId);
+      } catch { /* columns/tables may not exist yet — ignore */ }
+    })();
+
+    setUser({ id: adminId! } as User);
+    setRole("admin");
+    setPermissions(perms);
+    return { error: null };
+  }, []);
+
+  // Super Admin sign-in against the SEPARATE `super_admins` table. This is the
+  // only path that opens a super_admin session; the regular admin login never
+  // grants it. The Super Admin implicitly has every permission (see `can`).
+  const signInSuperAdmin = useCallback(async (phone: string, passwordText: string) => {
+    const normalized = normalizePhone(phone);
+
+    const { data, error } = await (supabase as any)
+      .from("super_admins")
       .select("id")
       .eq("phone", normalized)
       .eq("password", passwordText)
       .maybeSingle();
 
-    if (error || !data) {
-      return { error: "Invalid admin credentials." };
+    if (error) {
+      // Table not created yet (migration not run) or lookup failed.
+      return { error: "Super Admin sign-in isn't available yet. Run the super_admin migration." };
     }
+    if (!data) return { error: "Invalid Super Admin credentials." };
 
     localStorage.setItem("fitved_custom_user", data.id);
-    localStorage.setItem("fitved_custom_role", "admin");
+    localStorage.setItem("fitved_custom_role", "super_admin");
+    localStorage.setItem("fitved_actor_name", "Super Admin");
+    localStorage.removeItem("fitved_admin_permissions");
+
     setUser({ id: data.id } as User);
-    setRole("admin");
+    setRole("super_admin");
+    setPermissions(null);
     return { error: null };
   }, []);
 
@@ -456,27 +552,86 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signOut = useCallback(async () => {
     localStorage.removeItem("fitved_custom_user");
     localStorage.removeItem("fitved_custom_role");
+    localStorage.removeItem("fitved_admin_permissions");
+    localStorage.removeItem("fitved_actor_name");
+    localStorage.removeItem("fitved_sa_backup");
     await supabase.auth.signOut();
     await firebaseSignOut(firebaseAuth).catch(() => {});
     setUser(null);
     setRole(null);
+    setPermissions(null);
+    setImpersonating(false);
     window.location.href = "/";
   }, []);
+
+  // Super Admin opens a specific admin's dashboard by switching into that
+  // admin's session. The SA session is stashed so exitImpersonation() restores it.
+  const viewAsAdmin = useCallback((admin: { id: string; name: string | null; permissions: AdminPermissions | null }) => {
+    const backup = {
+      user: localStorage.getItem("fitved_custom_user"),
+      role: localStorage.getItem("fitved_custom_role"),
+      name: localStorage.getItem("fitved_actor_name"),
+    };
+    localStorage.setItem("fitved_sa_backup", JSON.stringify(backup));
+    localStorage.setItem("fitved_custom_user", admin.id);
+    localStorage.setItem("fitved_custom_role", "admin");
+    localStorage.setItem("fitved_actor_name", admin.name || "Admin");
+    if (admin.permissions) localStorage.setItem("fitved_admin_permissions", JSON.stringify(admin.permissions));
+    else localStorage.removeItem("fitved_admin_permissions");
+    setUser({ id: admin.id } as User);
+    setRole("admin");
+    setPermissions(admin.permissions ?? null);
+    setImpersonating(true);
+  }, []);
+
+  const exitImpersonation = useCallback(() => {
+    const raw = localStorage.getItem("fitved_sa_backup");
+    localStorage.removeItem("fitved_sa_backup");
+    localStorage.removeItem("fitved_admin_permissions");
+    let b: { user?: string | null; role?: string | null; name?: string | null } | null = null;
+    try { b = raw ? JSON.parse(raw) : null; } catch { b = null; }
+    if (b?.user) localStorage.setItem("fitved_custom_user", b.user); else localStorage.removeItem("fitved_custom_user");
+    if (b?.role) localStorage.setItem("fitved_custom_role", b.role); else localStorage.removeItem("fitved_custom_role");
+    if (b?.name) localStorage.setItem("fitved_actor_name", b.name); else localStorage.removeItem("fitved_actor_name");
+    setUser(b?.user ? ({ id: b.user } as User) : null);
+    setRole((b?.role as AppRole) || null);
+    setPermissions(null);
+    setImpersonating(false);
+  }, []);
+
+  const isSuperAdmin = role === "super_admin";
+
+  // Gate a destructive admin action. Super Admin → always allowed. A legacy
+  // admin whose permissions haven't loaded (migration not run) → allowed, so
+  // nothing that works today is taken away. Otherwise the explicit grant wins.
+  const can = useCallback(
+    (key: AdminPermissionKey) => {
+      if (role === "super_admin") return true;
+      if (role !== "admin") return false;
+      if (!permissions) return true;
+      return permissions[key] === true;
+    },
+    [role, permissions],
+  );
 
   const value = useMemo(
     () => ({
       user, session, role, loading, roleLoading,
-      signIn, signUp, signInWithPhone, signUpWithPhone, signInAdmin,
+      signIn, signUp, signInWithPhone, signUpWithPhone, signInAdmin, signInSuperAdmin,
       sendVerificationEmail, completeEmailVerification,
       signInTrainerGoogle, sendTrainerPasswordReset,
       signOut,
+      isSuperAdmin, permissions, can,
+      viewAsAdmin, exitImpersonation, impersonating,
     }),
     [
       user, session, role, loading, roleLoading,
-      signIn, signUp, signInWithPhone, signUpWithPhone, signInAdmin,
+      signIn, signUp, signInWithPhone, signUpWithPhone, signInAdmin, signInSuperAdmin,
       sendVerificationEmail, completeEmailVerification,
       signInTrainerGoogle, sendTrainerPasswordReset,
       signOut,
+      isSuperAdmin, permissions, can,
+      viewAsAdmin, exitImpersonation, impersonating,
     ]
   );
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

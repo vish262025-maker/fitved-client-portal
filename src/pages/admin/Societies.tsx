@@ -11,19 +11,28 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Plus, Pencil, Trash2 } from "lucide-react";
 import { toast } from "sonner";
+import { useAuth } from "@/contexts/AuthContext";
+import { trackAdminActivity } from "@/lib/adminActivity";
+import { useAdminsList } from "@/hooks/useAdminsList";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 interface Society {
   id: string;
   name: string;
   address: string | null;
+  assigned_admin_id?: string | null;
 }
 
 export default function Societies() {
   const qc = useQueryClient();
+  const { can } = useAuth();
+  const canDeleteSociety = can("delete_society");
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Society | null>(null);
   const [name, setName] = useState("");
   const [address, setAddress] = useState("");
+  const [assignedAdminId, setAssignedAdminId] = useState<string>("");
+  const { data: adminsList = [] } = useAdminsList();
 
   const { data: societies = [] } = useQuery({
     queryKey: ["societies"],
@@ -57,23 +66,37 @@ export default function Societies() {
     },
   });
 
-  const startNew = () => { setEditing(null); setName(""); setAddress(""); setOpen(true); };
-  const startEdit = (s: Society) => { setEditing(s); setName(s.name); setAddress(s.address ?? ""); setOpen(true); };
+  const startNew = () => { setEditing(null); setName(""); setAddress(""); setAssignedAdminId(""); setOpen(true); };
+  const startEdit = (s: Society) => { setEditing(s); setName(s.name); setAddress(s.address ?? ""); setAssignedAdminId(s.assigned_admin_id ?? ""); setOpen(true); };
 
   const save = useMutation({
     mutationFn: async () => {
       if (!name.trim()) throw new Error("Name required");
+      let societyId = editing?.id;
       if (editing) {
         const { error } = await supabase.from("societies")
           .update({ name, address: address || null }).eq("id", editing.id);
         if (error) throw error;
       } else {
-        const { error } = await supabase.from("societies").insert({ name, address: address || null });
+        const { data, error } = await supabase.from("societies")
+          .insert({ name, address: address || null }).select("id").single();
         if (error) throw error;
+        societyId = data?.id;
+      }
+      // Assign managing admin (best-effort — column may not exist pre-migration).
+      if (societyId) {
+        await (supabase as any).from("societies")
+          .update({ assigned_admin_id: assignedAdminId || null }).eq("id", societyId);
       }
     },
     onSuccess: () => {
       toast.success(editing ? "Society updated" : "Society created");
+      trackAdminActivity({
+        action: editing ? "society.update" : "society.create",
+        entityType: "society",
+        entityId: editing?.id ?? null,
+        entityLabel: name,
+      });
       qc.invalidateQueries({ queryKey: ["societies"] });
       setOpen(false);
     },
@@ -81,12 +104,13 @@ export default function Societies() {
   });
 
   const remove = useMutation({
-    mutationFn: async (id: string) => {
+    mutationFn: async ({ id }: { id: string; name: string }) => {
       const { error } = await supabase.from("societies").delete().eq("id", id);
       if (error) throw error;
     },
-    onSuccess: () => {
+    onSuccess: (_d, vars) => {
       toast.success("Deleted");
+      trackAdminActivity({ action: "society.delete", entityType: "society", entityId: vars.id, entityLabel: vars.name });
       qc.invalidateQueries({ queryKey: ["societies"] });
     },
     onError: (e) => toast.error(e instanceof Error ? e.message : "Delete failed"),
@@ -127,9 +151,11 @@ export default function Societies() {
                   <TableCell><Badge variant="secondary">{count}</Badge></TableCell>
                   <TableCell className="text-right">
                     <Button size="sm" variant="ghost" onClick={() => startEdit(s)}><Pencil className="h-4 w-4" /></Button>
-                    <Button size="sm" variant="ghost" onClick={() => {
-                      if (confirm(`Delete ${s.name}?`)) remove.mutate(s.id);
-                    }}><Trash2 className="h-4 w-4" /></Button>
+                    {canDeleteSociety && (
+                      <Button size="sm" variant="ghost" onClick={() => {
+                        if (confirm(`Delete ${s.name}?`)) remove.mutate({ id: s.id, name: s.name });
+                      }}><Trash2 className="h-4 w-4" /></Button>
+                    )}
                   </TableCell>
                 </TableRow>
               );
@@ -149,6 +175,18 @@ export default function Societies() {
             <div className="space-y-1.5">
               <Label>Address</Label>
               <Textarea value={address} onChange={(e) => setAddress(e.target.value)} rows={3} />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Managing admin</Label>
+              <Select value={assignedAdminId || "none"} onValueChange={(v) => setAssignedAdminId(v === "none" ? "" : v)}>
+                <SelectTrigger><SelectValue placeholder="Unassigned" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Unassigned</SelectItem>
+                  {adminsList.map((ad) => (
+                    <SelectItem key={ad.id} value={ad.id}>{ad.name || ad.phone || "Admin"}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </div>
           <DialogFooter>

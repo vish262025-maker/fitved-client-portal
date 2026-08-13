@@ -8,6 +8,7 @@ import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
+import { trackAdminActivity } from "@/lib/adminActivity";
 import { format } from "date-fns";
 import {
   WEEKDAYS,
@@ -238,6 +239,7 @@ export function PlanTab({ userId }: { userId: string }) {
     },
     onSuccess: async (saved) => {
       toast.success(plan ? "Plan updated" : "Plan created");
+      trackAdminActivity({ action: plan ? "plan.update" : "plan.create", entityType: "customer", entityId: userId, details: { totalSessions, amount, status } });
       // Write the saved row straight into the cache so the Plan tab shows the
       // new values immediately on remount — invalidate alone left it stale.
       if (saved) qc.setQueryData(["customer-plan", userId], saved);

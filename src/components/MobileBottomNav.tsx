@@ -10,6 +10,8 @@ import {
   Dumbbell,
   Package,
   Megaphone,
+  ShieldCheck,
+  Inbox,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { usePlansTabVisible } from "@/hooks/usePlansTabVisible";
@@ -35,13 +37,22 @@ const ADMIN_TABS = [
   { path: "/profile",         Icon: UserCircle2, label: "Profile" },
 ];
 
+const SUPER_ADMIN_TABS = [
+  { path: "/super-admin",          Icon: ShieldCheck,  label: "Admins" },
+  { path: "/super-admin/requests", Icon: Inbox,        label: "Requests" },
+  { path: "/profile",              Icon: UserCircle2,  label: "Profile" },
+];
+
 export function MobileBottomNav() {
   const location = useLocation();
   const navigate = useNavigate();
   const { role } = useAuth();
   const { visible: plansTabVisible } = usePlansTabVisible();
 
-  let NAV_TABS = role === "trainer" ? TRAINER_TABS : role === "admin" ? ADMIN_TABS : CLIENT_TABS;
+  let NAV_TABS = role === "trainer" ? TRAINER_TABS
+    : role === "admin" ? ADMIN_TABS
+    : role === "super_admin" ? SUPER_ADMIN_TABS
+    : CLIENT_TABS;
   if (role === "client" && !plansTabVisible) {
     NAV_TABS = NAV_TABS.filter((t) => t.path !== "/plan");
   }

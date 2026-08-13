@@ -13,6 +13,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { ClassCalendar } from "@/components/dashboard/ClassCalendar";
 import { toast } from "sonner";
+import { useAuth } from "@/contexts/AuthContext";
+import { trackAdminActivity } from "@/lib/adminActivity";
+import { useAdminsList } from "@/hooks/useAdminsList";
 import { cn } from "@/lib/utils";
 
 type AppRole = "client" | "trainer" | "admin";
@@ -150,6 +153,7 @@ export function ProfileTab({ userId }: { userId: string }) {
     },
   });
   const [calExpanded, setCalExpanded] = useState(true);
+  const { can } = useAuth();
 
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
@@ -159,6 +163,7 @@ export function ProfileTab({ userId }: { userId: string }) {
   const [rawSlot, setRawSlot] = useState("");
   const [trainerId, setTrainerId] = useState<string>("");
   const [societyId, setSocietyId] = useState<string>("");
+  const [assignedAdminId, setAssignedAdminId] = useState<string>("");
   const [newDob, setNewDob] = useState<Date | undefined>(undefined);
 
   useEffect(() => {
@@ -173,8 +178,11 @@ export function ProfileTab({ userId }: { userId: string }) {
       setEndTime(parsed.end);
       setTrainerId(profile.trainer_id ?? "");
       setSocietyId(profile.society_id ?? "");
+      setAssignedAdminId((profile as any).assigned_admin_id ?? "");
     }
   }, [profile]);
+
+  const { data: admins = [] } = useAdminsList();
 
   const availableTrainers = useMemo(() => {
     if (!societyId) return [];
@@ -259,6 +267,7 @@ export function ProfileTab({ userId }: { userId: string }) {
     },
     onSuccess: () => {
       toast.success("Customer and all associated data deleted successfully");
+      trackAdminActivity({ action: "customer.delete", entityType: "customer", entityId: userId, entityLabel: name });
       qc.invalidateQueries({ queryKey: ["admin-customer-list"] });
       qc.invalidateQueries({ queryKey: ["admin-dashboard"] });
       navigate("/admin/customers");
@@ -288,7 +297,7 @@ export function ProfileTab({ userId }: { userId: string }) {
       const societyName = societyId
         ? (societies.find((s) => s.id === societyId)?.name ?? null)
         : null;
-      const { error } = await supabase.from("profiles").update({
+      const payload: Record<string, unknown> = {
         name: name || null,
         phone: phone || null,
         email: email || null,
@@ -296,11 +305,19 @@ export function ProfileTab({ userId }: { userId: string }) {
         time_slot: composedSlot || null,
         trainer_id: trainerId || null,
         society_id: societyId || null,
-      }).eq("id", userId);
+        assigned_admin_id: assignedAdminId || null,
+      };
+      let { error } = await (supabase as any).from("profiles").update(payload).eq("id", userId);
+      // If the assignment column isn't there yet, retry without it.
+      if (error && /assigned_admin_id/.test(error.message || "")) {
+        delete payload.assigned_admin_id;
+        ({ error } = await (supabase as any).from("profiles").update(payload).eq("id", userId));
+      }
       if (error) throw error;
     },
     onSuccess: () => {
       toast.success("Profile saved");
+      trackAdminActivity({ action: "customer.update", entityType: "customer", entityId: userId, entityLabel: name });
       qc.invalidateQueries({ queryKey: ["customer-profile", userId] });
       qc.invalidateQueries({ queryKey: ["admin-customer-list"] });
     },
@@ -464,6 +481,20 @@ export function ProfileTab({ userId }: { userId: string }) {
           )}
         </div>
       </div>
+
+      <div className="space-y-1.5 max-w-sm">
+        <Label>Managing admin</Label>
+        <Select value={assignedAdminId || "none"} onValueChange={(v) => setAssignedAdminId(v === "none" ? "" : v)}>
+          <SelectTrigger><SelectValue placeholder="Unassigned" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="none">Unassigned</SelectItem>
+            {admins.map((ad) => (
+              <SelectItem key={ad.id} value={ad.id}>{ad.name || ad.phone || "Admin"}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <p className="text-xs text-muted-foreground">Which admin manages this customer.</p>
+      </div>
       {composedSlot && (
         <p className="text-xs text-muted-foreground -mt-3">
           Saves as <span className="font-medium text-foreground">{composedSlot}</span>
@@ -543,6 +574,7 @@ export function ProfileTab({ userId }: { userId: string }) {
         </div>
       </div>
 
+      {can("delete_customer") && (
       <div className="border-t pt-5 mt-5 space-y-3 bg-red-500/[0.03] border-destructive/20 rounded-2xl p-4">
         <h3 className="font-semibold text-destructive text-sm flex items-center gap-1.5">
           <AlertTriangle className="h-4.5 w-4.5" /> Danger Zone
@@ -559,6 +591,7 @@ export function ProfileTab({ userId }: { userId: string }) {
           {deleteMutation.isPending ? "Deleting..." : "Delete Customer Account"}
         </Button>
       </div>
+      )}
       </div>
 
       {/* ── Class calendar (same view the customer sees) ─────────────────── */}

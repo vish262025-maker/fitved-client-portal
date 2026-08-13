@@ -1,5 +1,5 @@
 import { NavLink, useLocation } from "react-router-dom";
-import { LayoutDashboard, CalendarOff, CreditCard, FileHeart, UserCircle2, Users, Dumbbell, Building2, Gauge, Package, Megaphone, Gift } from "lucide-react";
+import { LayoutDashboard, CalendarOff, CreditCard, FileHeart, UserCircle2, Users, Dumbbell, Building2, Gauge, Package, Megaphone, Gift, ShieldCheck, Inbox } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -49,13 +49,19 @@ export function AppSidebar() {
       { title: "Referrals", url: "/admin/referrals", icon: Gift },
       { title: "Profile", url: "/profile", icon: UserCircle2 },
     ];
+  } else if (role === "super_admin") {
+    items = [
+      { title: "Admins", url: "/super-admin", icon: ShieldCheck },
+      { title: "Requests", url: "/super-admin/requests", icon: Inbox },
+      { title: "Profile", url: "/profile", icon: UserCircle2 },
+    ];
   } else if (role === "client" && !plansTabVisible) {
     // Admin can hide the Plan tab per customer (default hidden for new users).
     items = items.filter((i) => i.url !== "/plan");
   }
 
   const isActive = (path: string) =>
-    (path === "/dashboard" || path === "/trainer" || path === "/admin")
+    (path === "/dashboard" || path === "/trainer" || path === "/admin" || path === "/super-admin")
       ? pathname === path
       : pathname.startsWith(path);
 
@@ -81,7 +87,7 @@ export function AppSidebar() {
                     <SidebarMenuButton asChild isActive={active} tooltip={item.title}>
                       <NavLink
                         to={item.url}
-                        end={item.url === "/dashboard" || item.url === "/admin"}
+                        end={item.url === "/dashboard" || item.url === "/admin" || item.url === "/super-admin"}
                         className="flex items-center gap-3 rounded-lg transition-colors"
                       >
                         <item.icon className="h-5 w-5 shrink-0" />

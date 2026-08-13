@@ -21,6 +21,9 @@ import { Plus, Pencil, Trash2, Eye, CalendarOff, Clock, Info, AlertTriangle, Loa
 import { toast } from "sonner";
 import TrainerReviewDialog from "@/components/admin/TrainerReviewDialog";
 import { SPECIALIZATIONS } from "@/lib/specializations";
+import { useAuth } from "@/contexts/AuthContext";
+import { trackAdminActivity } from "@/lib/adminActivity";
+import { useAdminsList } from "@/hooks/useAdminsList";
 
 interface Trainer {
   id: string;
@@ -68,6 +71,9 @@ function localDate(d: string): string {
 export default function Trainers() {
   const qc = useQueryClient();
   const navigate = useNavigate();
+  const { can } = useAuth();
+  const canDeleteTrainer = can("delete_trainer");
+  const { data: adminsList = [] } = useAdminsList();
   const today = todayISO();
 
   // ── Trainer add/edit dialog ────────────────────────────────────────────────
@@ -78,6 +84,7 @@ export default function Trainers() {
   const [specializations, setSpecializations] = useState<string[]>([]);
   const [active, setActive] = useState(true);
   const [societyIds, setSocietyIds] = useState<string[]>([]);
+  const [assignedAdminId, setAssignedAdminId] = useState<string>("");
   const [createLogin, setCreateLogin] = useState(false);
   const [loginEmail, setLoginEmail] = useState("");
   const [slotsBySociety, setSlotsBySociety] = useState<Record<string, string[]>>({});
@@ -349,6 +356,7 @@ export default function Trainers() {
   const startNew = () => {
     setEditing(null); setName(""); setContact(""); setSpecializations([]);
     setActive(true); setSocietyIds([]); setCreateLogin(false);
+    setAssignedAdminId("");
     setLoginEmail("");
     setSlotsBySociety({}); setSlotDraft({});
     setOpen(true);
@@ -368,6 +376,7 @@ export default function Trainers() {
     );
    
     setActive(t.active);
+    setAssignedAdminId((t as any).assigned_admin_id ?? "");
     setSocietyIds(links.filter((l) => l.trainer_id === t.id).map((l) => l.society_id));
     setCreateLogin(false); setLoginEmail("");
     const seeded: Record<string, string[]> = {};
@@ -450,6 +459,12 @@ export default function Trainers() {
         trainerId = data.id;
       }
 
+      // Assign managing admin (best-effort — column may not exist pre-migration).
+      if (trainerId) {
+        await (supabase as any).from("trainers")
+          .update({ assigned_admin_id: assignedAdminId || null }).eq("id", trainerId);
+      }
+
       // sync trainer_societies
       if (trainerId) {
         await supabase.from("trainer_societies").delete().eq("trainer_id", trainerId);
@@ -477,6 +492,12 @@ export default function Trainers() {
     },
     onSuccess: () => {
       toast.success(editing ? "Trainer updated" : "Trainer created");
+      trackAdminActivity({
+        action: editing ? "trainer.update" : "trainer.create",
+        entityType: "trainer",
+        entityId: editing?.id ?? null,
+        entityLabel: name,
+      });
       qc.invalidateQueries({ queryKey: ["trainers"] });
       qc.invalidateQueries({ queryKey: ["trainer_societies"] });
       qc.invalidateQueries({ queryKey: ["trainer-slots-all"] });
@@ -552,8 +573,14 @@ export default function Trainers() {
       const { error } = await supabase.from("trainers").update({ active: true }).eq("id", id);
       if (error) throw error;
     },
-    onSuccess: () => {
+    onSuccess: (_d, id) => {
       toast.success("Trainer verified — they now have full access.");
+      trackAdminActivity({
+        action: "trainer.approve",
+        entityType: "trainer",
+        entityId: id,
+        entityLabel: trainers.find((t) => t.id === id)?.name ?? null,
+      });
       qc.invalidateQueries({ queryKey: ["trainers"] });
     },
     onError: (e) => toast.error(e instanceof Error ? e.message : "Approve failed"),
@@ -582,12 +609,18 @@ export default function Trainers() {
       const { error } = await supabase.from("trainers").delete().eq("id", id);
       if (error) throw error;
     },
-    onSuccess: () => {
+    onSuccess: (_d, deletedId) => {
       // Note: their Firebase login (if any) is NOT removed — the client SDK
       // can't delete other users. It's harmless: with no trainers row, sign-in
       // is refused. To also purge the Firebase account, delete it in the
       // Firebase console or deploy the onDelete Cloud Function (see README).
       toast.success("Trainer and all their data deleted.");
+      trackAdminActivity({
+        action: "trainer.delete",
+        entityType: "trainer",
+        entityId: deletedId,
+        entityLabel: trainers.find((t) => t.id === deletedId)?.name ?? null,
+      });
       qc.invalidateQueries({ queryKey: ["trainers"] });
       qc.invalidateQueries({ queryKey: ["trainer_societies"] });
       qc.invalidateQueries({ queryKey: ["admin-customer-list"] });
@@ -811,10 +844,12 @@ export default function Trainers() {
                   <Button size="sm" variant="outline" className="gap-1.5" disabled={approve.isPending} onClick={() => approve.mutate(t.id)}>
                     <BadgeCheck className="h-4 w-4" /> Approve
                   </Button>
-                  <Button size="sm" variant="ghost" className="text-destructive" title="Reject & delete"
-                    onClick={() => { if (confirm(`Reject and delete ${t.name}'s request?`)) remove.mutate(t.id); }}>
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
+                  {canDeleteTrainer && (
+                    <Button size="sm" variant="ghost" className="text-destructive" title="Reject & delete"
+                      onClick={() => { if (confirm(`Reject and delete ${t.name}'s request?`)) remove.mutate(t.id); }}>
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  )}
                 </div>
               </div>
             ))}
@@ -891,9 +926,11 @@ export default function Trainers() {
                       <Eye className="h-4 w-4" />
                     </Button>
                     <Button size="sm" variant="ghost" onClick={() => startEdit(t)}><Pencil className="h-4 w-4" /></Button>
-                    <Button size="sm" variant="ghost" onClick={() => {
-                      if (confirm(`Delete ${t.name}?`)) remove.mutate(t.id);
-                    }}><Trash2 className="h-4 w-4" /></Button>
+                    {canDeleteTrainer && (
+                      <Button size="sm" variant="ghost" onClick={() => {
+                        if (confirm(`Delete ${t.name}?`)) remove.mutate(t.id);
+                      }}><Trash2 className="h-4 w-4" /></Button>
+                    )}
                   </TableCell>
                 </TableRow>
               );
@@ -1243,6 +1280,18 @@ export default function Trainers() {
                 <Label>Contact</Label>
                 <Input value={contact} onChange={(e) => setContact(e.target.value)} placeholder="Phone or email" />
               </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Managing admin</Label>
+              <Select value={assignedAdminId || "none"} onValueChange={(v) => setAssignedAdminId(v === "none" ? "" : v)}>
+                <SelectTrigger><SelectValue placeholder="Unassigned" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Unassigned</SelectItem>
+                  {adminsList.map((ad) => (
+                    <SelectItem key={ad.id} value={ad.id}>{ad.name || ad.phone || "Admin"}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-1.5">
               <Label>Specializations</Label>
