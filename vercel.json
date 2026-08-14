@@ -2,6 +2,12 @@
   "cleanUrls": true,
   "redirects": [
     {
+      "source": "/:path(.*)",
+      "has": [{ "type": "host", "value": "getfitved.com" }],
+      "destination": "https://www.getfitved.com/:path",
+      "permanent": true
+    },
+    {
       "source": "/personal-training.html",
       "destination": "/personal-training",
       "permanent": true

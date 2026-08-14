@@ -118,6 +118,7 @@ export interface BlogArticle {
   comparison_details?: ComparisonDetails;
   location_data?: LocationData;
   topic_hub_slug?: string;
+  noindex?: boolean;
 }
 
 export interface TopicHub {

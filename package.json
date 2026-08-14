@@ -5,8 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "node scripts/generate-booking-config.js && vite",
-    "build": "node scripts/generate-booking-config.js && node scripts/generate-sitemap.cjs && vite build",
-    "generate:sitemap": "node scripts/generate-sitemap.cjs",
+    "build": "node scripts/generate-booking-config.js && vite build",
     "export:blog-data": "npx tsx scripts/export-blog-data.ts",
     "build:dev": "node scripts/generate-booking-config.js && vite build --mode development",
     "generate:config": "node scripts/generate-booking-config.js",

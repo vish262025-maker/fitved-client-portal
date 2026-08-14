@@ -1,4 +1,4 @@
-# Fitved — allow crawling of public marketing pages, keep the logged-in app out of index.
+# FitVed — allow crawling of all public pages, block authenticated app routes.
 
 User-agent: *
 Allow: /$
@@ -18,38 +18,8 @@ Allow: /prenatal-postnatal-yoga
 Allow: /clinical-fitness-bangalore
 Allow: /womens-fitness-bangalore
 Allow: /diet-coaching-bangalore
-Allow: /personal-trainer/
-Allow: /online-personal-trainer/
-Allow: /female-personal-trainer/
-Allow: /strength-training/
-Allow: /vegetarian-muscle-building/
-Allow: /powerlifting-coach/
-Allow: /yoga/
-Allow: /yoga-trainer/
-Allow: /online-yoga/
-Allow: /prenatal-yoga/
-Allow: /pilates-trainer/
-Allow: /weight-loss-coach/
-Allow: /fat-loss-trainer/
-Allow: /pcos-fitness-coach/
-Allow: /diabetes-fitness-coach/
-Allow: /thyroid-fitness-coach/
-Allow: /diabetes-reversal-coach/
-Allow: /glp1-mounjaro-coach/
-Allow: /postpartum-weight-loss/
-Allow: /diastasis-recti-recovery/
-Allow: /post-pregnancy-weight-loss-coach/
-Allow: /lactation-safe-weight-loss/
-Allow: /corporate-wellness/
-Allow: /compare/
-Allow: /bmi-calculator
-Allow: /calorie-calculator
-Allow: /macro-calculator
-Allow: /ideal-weight-calculator
-Allow: /tdee-calculator
-Allow: /daily-calorie-burn-calculator
-Allow: /indian-fat-loss-guide
-Allow: /societies/
+
+# Block authenticated app routes
 Disallow: /dashboard
 Disallow: /admin
 Disallow: /trainer
@@ -66,9 +36,14 @@ Disallow: /societies/404
 # GEO (Generative Engine Optimization) — explicitly allow AI search crawlers
 User-agent: GPTBot
 Allow: /
+Disallow: /dashboard
+Disallow: /admin
+Disallow: /login
 
 User-agent: ChatGPT-User
 Allow: /
+Disallow: /dashboard
+Disallow: /admin
 
 User-agent: Google-Extended
 Allow: /
@@ -80,3 +55,7 @@ User-agent: PerplexityBot
 Allow: /
 
 Sitemap: https://www.getfitved.com/sitemap.xml
+
+# Canonical host: www.getfitved.com
+# Non-www requests should 301 to www (configured in Vercel)
+Host: https://www.getfitved.com

@@ -19,6 +19,8 @@ export interface BlogSeoProps {
   type?: "article" | "website";
   publishedTime?: string;
   modifiedTime?: string;
+  /** When true, injects <meta name="robots" content="noindex, follow">. */
+  noindex?: boolean;
   /** Any number of JSON-LD objects to inject (Article, Breadcrumb, FAQ, …). */
   jsonLd?: Array<Record<string, unknown> | null | undefined>;
 }
@@ -59,6 +61,7 @@ export function BlogSeo({
   type = "article",
   publishedTime,
   modifiedTime,
+  noindex,
   jsonLd,
 }: BlogSeoProps) {
   useEffect(() => {
@@ -72,6 +75,10 @@ export function BlogSeo({
       const el = upsertMeta(sel, attr, key, content);
       if (el.getAttribute(MANAGED_ATTR) === "1") managed.push(el);
     };
+
+    if (noindex) {
+      set("name", "robots", "noindex, follow");
+    }
 
     set("name", "description", description);
     if (keywords?.length) set("name", "keywords", keywords.join(", "));
