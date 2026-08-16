@@ -8,9 +8,8 @@ import { ArrowLeft } from "lucide-react";
 import { ProfileTab } from "@/components/admin/customer-tabs/ProfileTab";
 import { PlanTab } from "@/components/admin/customer-tabs/PlanTab";
 import { PausesTab } from "@/components/admin/customer-tabs/PausesTab";
-import { BillingTab } from "@/components/admin/customer-tabs/BillingTab";
 import { HealthTab } from "@/components/admin/customer-tabs/HealthTab";
-import { TasksTab } from "@/components/admin/customer-tabs/TasksTab";
+import { ManageAccountTab } from "@/components/admin/customer-tabs/ManageAccountTab";
 
 export default function CustomerDetail() {
   const { id } = useParams<{ id: string }>();
@@ -46,21 +45,19 @@ export default function CustomerDetail() {
 
       <Card className="rounded-2xl shadow-card p-2">
         <Tabs defaultValue="profile" className="w-full">
-          <TabsList className="grid grid-cols-3 md:grid-cols-6 w-full">
+          <TabsList className="grid grid-cols-3 md:grid-cols-5 w-full">
             <TabsTrigger value="profile">Profile</TabsTrigger>
             <TabsTrigger value="plan">Plan</TabsTrigger>
             <TabsTrigger value="pauses">Pauses</TabsTrigger>
-            <TabsTrigger value="billing">Billing</TabsTrigger>
             <TabsTrigger value="health">Health</TabsTrigger>
-            <TabsTrigger value="tasks">Tasks</TabsTrigger>
+            <TabsTrigger value="manage">Manage Account</TabsTrigger>
           </TabsList>
           <div className="p-4">
             <TabsContent value="profile"><ProfileTab userId={id} /></TabsContent>
             <TabsContent value="plan"><PlanTab userId={id} /></TabsContent>
             <TabsContent value="pauses"><PausesTab userId={id} /></TabsContent>
-            <TabsContent value="billing"><BillingTab userId={id} /></TabsContent>
             <TabsContent value="health"><HealthTab userId={id} /></TabsContent>
-            <TabsContent value="tasks"><TasksTab userId={id} /></TabsContent>
+            <TabsContent value="manage"><ManageAccountTab userId={id} /></TabsContent>
           </div>
         </Tabs>
       </Card>

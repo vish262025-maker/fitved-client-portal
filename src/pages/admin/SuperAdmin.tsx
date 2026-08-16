@@ -7,7 +7,7 @@ import { trackAdminActivity } from "@/lib/adminActivity";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   ADMIN_PERMISSIONS,
-  fullPermissions,
+  emptyPermissions,
   type AdminPermissions,
 } from "@/lib/permissions";
 import { Card } from "@/components/ui/card";
@@ -47,7 +47,10 @@ export default function SuperAdmin() {
 
   const openAdminDashboard = (a: AdminRow) => {
     viewAsAdmin({ id: a.id, name: a.name, permissions: a.permissions ?? null });
-    navigate("/admin", { replace: true });
+    // Wipe the React Query cache and hard-load /admin so the opened dashboard
+    // renders THIS admin's data — not whatever admin was viewed just before.
+    qc.clear();
+    window.location.assign("/admin");
   };
 
   const [createOpen, setCreateOpen] = useState(false);
@@ -98,7 +101,7 @@ export default function SuperAdmin() {
         name: name.trim(),
         phone: normalized,
         password,
-        permissions: fullPermissions(),
+        permissions: emptyPermissions(),
       }).select("id").maybeSingle();
       // If the permissions column doesn't exist yet, retry with the legacy shape.
       if (res.error && isSchemaError(res.error)) {

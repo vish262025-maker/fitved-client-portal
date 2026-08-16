@@ -94,6 +94,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setLoading(false);
   }, []);
 
+  // Keep a real admin's permissions in sync with the DB. The login snapshot in
+  // localStorage can go stale when the Super Admin toggles a permission after
+  // the admin has already signed in — refetch on load so `can()` reflects the
+  // current grant. Skipped while impersonating (the SA carries their own map).
+  useEffect(() => {
+    if (impersonating) return;
+    if (role !== "admin" || !user?.id) return;
+    let cancelled = false;
+    (async () => {
+      const res = await (supabase as any)
+        .from("admins")
+        .select("permissions")
+        .eq("id", user.id)
+        .maybeSingle();
+      if (cancelled || res.error || !res.data) return;
+      const perms =
+        res.data.permissions && typeof res.data.permissions === "object"
+          ? (res.data.permissions as AdminPermissions)
+          : null;
+      setPermissions(perms);
+      if (perms) localStorage.setItem("fitved_admin_permissions", JSON.stringify(perms));
+      else localStorage.removeItem("fitved_admin_permissions");
+    })();
+    return () => { cancelled = true; };
+  }, [role, user?.id, impersonating]);
+
   // Open the app session for a resolved user id + role.
   const openSession = useCallback((userId: string, appRole: AppRole) => {
     localStorage.setItem("fitved_custom_user", userId);
@@ -567,12 +593,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Super Admin opens a specific admin's dashboard by switching into that
   // admin's session. The SA session is stashed so exitImpersonation() restores it.
   const viewAsAdmin = useCallback((admin: { id: string; name: string | null; permissions: AdminPermissions | null }) => {
-    const backup = {
-      user: localStorage.getItem("fitved_custom_user"),
-      role: localStorage.getItem("fitved_custom_role"),
-      name: localStorage.getItem("fitved_actor_name"),
-    };
-    localStorage.setItem("fitved_sa_backup", JSON.stringify(backup));
+    // If already impersonating (switching from one admin to another), keep the
+    // ORIGINAL Super Admin session as the backup — never overwrite it with the
+    // outgoing admin's session, or exitImpersonation would restore the wrong user.
+    if (!localStorage.getItem("fitved_sa_backup")) {
+      const backup = {
+        user: localStorage.getItem("fitved_custom_user"),
+        role: localStorage.getItem("fitved_custom_role"),
+        name: localStorage.getItem("fitved_actor_name"),
+      };
+      localStorage.setItem("fitved_sa_backup", JSON.stringify(backup));
+    }
     localStorage.setItem("fitved_custom_user", admin.id);
     localStorage.setItem("fitved_custom_role", "admin");
     localStorage.setItem("fitved_actor_name", admin.name || "Admin");
@@ -607,11 +638,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const can = useCallback(
     (key: AdminPermissionKey) => {
       if (role === "super_admin") return true;
+      if (impersonating) return true;
       if (role !== "admin") return false;
       if (!permissions) return true;
       return permissions[key] === true;
     },
-    [role, permissions],
+    [role, permissions, impersonating],
   );
 
   const value = useMemo(
