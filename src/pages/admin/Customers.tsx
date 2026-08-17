@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,17 +24,19 @@ interface CustomerRow {
 
 export default function Customers() {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const adminId = user?.id ?? null;
   const [search, setSearch] = useState("");
   const [addOpen, setAddOpen] = useState(false);
 
   const { data: customers = [], isLoading, refetch } = useQuery({
-    queryKey: ["admin-customer-list"],
+    queryKey: ["admin-customer-list", adminId],
     queryFn: async (): Promise<CustomerRow[]> => {
       // One parallel round trip — roles are filtered client-side instead of
       // paying a serial roles-then-data waterfall.
       const [{ data: roles }, { data: allProfiles }, { data: plans }, { data: trainers }, { data: societies }] = await Promise.all([
         supabase.from("user_roles").select("user_id").eq("role", "client"),
-        supabase.from("profiles").select("id, name, phone, society_id, trainer_id"),
+        (supabase as any).from("profiles").select("id, name, phone, society_id, trainer_id, assigned_admin_id"),
         supabase.from("plans").select("user_id, total_sessions, status, created_at")
           .order("created_at", { ascending: false }),
         supabase.from("trainers").select("id, name"),
@@ -41,7 +44,11 @@ export default function Customers() {
       ]);
 
       const clientIds = new Set((roles ?? []).map((r) => r.user_id));
-      const profiles = (allProfiles ?? []).filter((p) => clientIds.has(p.id));
+      // Scope to the customers assigned to this admin (impersonating SA uses the
+      // viewed admin's id, so they see exactly that admin's customer book).
+      const profiles = ((allProfiles ?? []) as any[])
+        .filter((p) => clientIds.has(p.id))
+        .filter((p) => (adminId ? p.assigned_admin_id === adminId : true));
 
       return (profiles ?? []).map((p) => {
         // Plans are newest-first, so the first match is the current cycle —

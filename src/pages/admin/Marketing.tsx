@@ -13,6 +13,8 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Plus, Trash2, ExternalLink, Megaphone, ImageIcon, Video } from "lucide-react";
 import { toast } from "sonner";
 import { formatDate } from "@/lib/dates";
+import { useAuth } from "@/contexts/AuthContext";
+import { scopeByAdmin } from "@/lib/adminScope";
 
 interface Post {
   id: string;
@@ -23,6 +25,7 @@ interface Post {
   cta_url: string | null;
   active: boolean;
   created_at: string;
+  assigned_admin_id?: string | null;
 }
 
 export function marketingMediaUrl(path: string): string {
@@ -31,6 +34,8 @@ export function marketingMediaUrl(path: string): string {
 
 export default function Marketing() {
   const qc = useQueryClient();
+  const { user } = useAuth();
+  const adminId = user?.id ?? null;
   const [open, setOpen] = useState(false);
   const [caption, setCaption] = useState("");
   const [file, setFile] = useState<File | null>(null);
@@ -38,12 +43,13 @@ export default function Marketing() {
   const [ctaUrl, setCtaUrl] = useState("");
 
   const { data: posts = [], isLoading } = useQuery({
-    queryKey: ["marketing-posts-admin"],
+    queryKey: ["marketing-posts-admin", adminId],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("marketing_posts").select("*").order("created_at", { ascending: false });
       if (error) throw error;
-      return data as Post[];
+      // Each admin sees only their own posts; a new admin starts with none.
+      return scopeByAdmin((data ?? []) as Post[], adminId);
     },
   });
 
@@ -60,14 +66,21 @@ export default function Marketing() {
       const { error: upErr } = await supabase.storage.from("marketing").upload(path, file);
       if (upErr) throw upErr;
 
-      const { error } = await supabase.from("marketing_posts").insert({
+      const payload: Record<string, unknown> = {
         caption: caption.trim() || null,
         media_path: path,
         media_type: isVideo ? "video" : "image",
         cta_label: ctaLabel === "none" ? null : ctaLabel,
         cta_url: ctaLabel === "none" ? null : ctaUrl.trim(),
         active: true,
-      });
+        assigned_admin_id: adminId,
+      };
+      let { error } = await (supabase as any).from("marketing_posts").insert(payload);
+      // Retry without the owner column if the migration hasn't run yet.
+      if (error && /assigned_admin_id/.test(error.message || "")) {
+        delete payload.assigned_admin_id;
+        ({ error } = await (supabase as any).from("marketing_posts").insert(payload));
+      }
       if (error) throw error;
     },
     onSuccess: () => {

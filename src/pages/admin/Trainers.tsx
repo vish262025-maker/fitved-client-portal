@@ -22,6 +22,7 @@ import { toast } from "sonner";
 import TrainerReviewDialog from "@/components/admin/TrainerReviewDialog";
 import { SPECIALIZATIONS } from "@/lib/specializations";
 import { useAuth } from "@/contexts/AuthContext";
+import { scopeByAdmin } from "@/lib/adminScope";
 import { trackAdminActivity } from "@/lib/adminActivity";
 import { useAdminsList } from "@/hooks/useAdminsList";
 
@@ -71,7 +72,8 @@ function localDate(d: string): string {
 export default function Trainers() {
   const qc = useQueryClient();
   const navigate = useNavigate();
-  const { can } = useAuth();
+  const { can, user } = useAuth();
+  const adminId = user?.id ?? null;
   const canDeleteTrainer = can("delete_trainer");
   const { data: adminsList = [] } = useAdminsList();
   const today = todayISO();
@@ -121,12 +123,14 @@ export default function Trainers() {
 
   // ── Data queries ───────────────────────────────────────────────────────────
   const { data: trainers = [] } = useQuery({
-    queryKey: ["trainers"],
+    queryKey: ["trainers", adminId],
     queryFn: async () => {
       const { data, error } = await supabase.from("trainers").select("*").order("name");
       if (error) throw error;
       // `specializations` (text[]) exists at runtime but isn't in the generated types yet.
-      return data as unknown as Trainer[];
+      // Each admin sees only their own trainers (impersonating SA uses the viewed
+      // admin's id); a new admin starts with none.
+      return scopeByAdmin((data ?? []) as any[], adminId) as unknown as Trainer[];
     },
   });
 
@@ -459,10 +463,11 @@ export default function Trainers() {
         trainerId = data.id;
       }
 
-      // Assign managing admin (best-effort — column may not exist pre-migration).
+      // Assign managing admin — default to the admin creating this trainer so
+      // it lands in their dashboard (best-effort; column may not exist pre-migration).
       if (trainerId) {
         await (supabase as any).from("trainers")
-          .update({ assigned_admin_id: assignedAdminId || null }).eq("id", trainerId);
+          .update({ assigned_admin_id: assignedAdminId || adminId || null }).eq("id", trainerId);
       }
 
       // sync trainer_societies

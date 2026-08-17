@@ -46,11 +46,11 @@ export default function SuperAdmin() {
   const { viewAsAdmin } = useAuth();
 
   const openAdminDashboard = (a: AdminRow) => {
-    viewAsAdmin({ id: a.id, name: a.name, permissions: a.permissions ?? null });
-    // Wipe the React Query cache and hard-load /admin so the opened dashboard
-    // renders THIS admin's data — not whatever admin was viewed just before.
+    // Drop any cached data from a previously-viewed admin so the opened
+    // dashboard shows THIS admin's context, then switch into their session.
     qc.clear();
-    window.location.assign("/admin");
+    viewAsAdmin({ id: a.id, name: a.name, permissions: a.permissions ?? null });
+    navigate("/admin", { replace: true });
   };
 
   const [createOpen, setCreateOpen] = useState(false);

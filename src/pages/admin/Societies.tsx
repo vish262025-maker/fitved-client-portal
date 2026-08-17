@@ -14,6 +14,7 @@ import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 import { trackAdminActivity } from "@/lib/adminActivity";
 import { useAdminsList } from "@/hooks/useAdminsList";
+import { scopeByAdmin } from "@/lib/adminScope";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 interface Society {
@@ -25,7 +26,8 @@ interface Society {
 
 export default function Societies() {
   const qc = useQueryClient();
-  const { can } = useAuth();
+  const { can, user } = useAuth();
+  const adminId = user?.id ?? null;
   const canDeleteSociety = can("delete_society");
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Society | null>(null);
@@ -35,12 +37,13 @@ export default function Societies() {
   const { data: adminsList = [] } = useAdminsList();
 
   const { data: societies = [] } = useQuery({
-    queryKey: ["societies"],
+    queryKey: ["societies", adminId],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("societies").select("*").order("name");
       if (error) throw error;
-      return data as Society[];
+      // Each admin sees only their own societies; a new admin starts with none.
+      return scopeByAdmin((data ?? []) as Society[], adminId);
     },
   });
 
@@ -83,10 +86,11 @@ export default function Societies() {
         if (error) throw error;
         societyId = data?.id;
       }
-      // Assign managing admin (best-effort — column may not exist pre-migration).
+      // Assign managing admin — default to the admin creating this society so
+      // it lands in their dashboard (best-effort; column may not exist pre-migration).
       if (societyId) {
         await (supabase as any).from("societies")
-          .update({ assigned_admin_id: assignedAdminId || null }).eq("id", societyId);
+          .update({ assigned_admin_id: (editing ? assignedAdminId : (assignedAdminId || adminId)) || null }).eq("id", societyId);
       }
     },
     onSuccess: () => {

@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
 import { buildMonthlyIncomeFromBilling, monthlyBreakdownArray, monthKey } from "@/lib/incomeAllocation";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -47,6 +48,8 @@ type LapsedRow = { userId: string; name: string; phone: string | null; society: 
 
 export default function AdminDashboard() {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const adminId = user?.id ?? null;
 
   const today = new Date();
   const todayISO = toISO(today);
@@ -55,14 +58,14 @@ export default function AdminDashboard() {
   const daysUntil = (iso: string) => Math.round((parseISO(iso).getTime() - parseISO(todayISO).getTime()) / 86400000);
 
   const { data, isLoading } = useQuery({
-    queryKey: ["admin-dashboard"],
+    queryKey: ["admin-dashboard", adminId],
     queryFn: async () => {
       // Everything in ONE parallel round trip — the tables are small, so it's
       // cheaper to fetch them whole and filter by role client-side than to pay
       // a serial roles-then-data waterfall (each round trip is a full RTT).
       const [rolesRes, profilesRes, allPlansRes, pausesRes, billingRes, societiesRes, trainersRes, offRes] = await Promise.all([
         supabase.from("user_roles").select("user_id").eq("role", "client"),
-        supabase.from("profiles").select("id, name, phone, society_id, trainer_id, time_slot"),
+        (supabase as any).from("profiles").select("id, name, phone, society_id, trainer_id, time_slot, assigned_admin_id"),
         // ALL plans (incl. completed) — used both for the client widgets and
         // for income proration, so fetch once with the union of columns
         (supabase as any).from("plans").select("id, user_id, amount, discount, status, start_date, end_date, auto_renew, renewal_date"),
@@ -70,19 +73,30 @@ export default function AdminDashboard() {
         // Fetch all billing with plan_id for proration (type marks refunds)
         (supabase as any).from("billing_history").select("amount, payment_date, plan_id, type"),
         supabase.from("societies").select("id, name"),
-        supabase.from("trainers").select("id, name"),
+        (supabase as any).from("trainers").select("id, name, assigned_admin_id"),
         (supabase as any).from("trainer_off_times").select("id, trainer_id, from_date, to_date, time_slot, reason").gte("to_date", todayISO).order("from_date"),
       ]);
 
-      const clientIds = new Set(((rolesRes.data ?? []) as any[]).map((r) => r.user_id));
-      const profiles = ((profilesRes.data ?? []) as any[]).filter((p) => clientIds.has(p.id));
-      const allPlansForIncome = (allPlansRes.data ?? []) as any[];
-      const plans = allPlansForIncome.filter((p) => clientIds.has(p.user_id));
+      const roleClientIds = new Set(((rolesRes.data ?? []) as any[]).map((r) => r.user_id));
+      // Each admin only sees the customers assigned to them; the impersonating
+      // Super Admin uses the viewed admin's id, so they see that admin's book.
+      const profiles = ((profilesRes.data ?? []) as any[])
+        .filter((p) => roleClientIds.has(p.id))
+        .filter((p) => (adminId ? p.assigned_admin_id === adminId : true));
+      const clientIds = new Set(profiles.map((p) => p.id));
+      const allPlansForIncome = ((allPlansRes.data ?? []) as any[]).filter((p) => clientIds.has(p.user_id));
+      const plans = allPlansForIncome;
       const pauses = ((pausesRes.data ?? []) as any[]).filter((p) => clientIds.has(p.user_id));
-      const billing = (billingRes.data ?? []) as any[];
+      // Only bill for plans owned by this admin's customers (proration keys on plan_id).
+      const scopedPlanIds = new Set(allPlansForIncome.map((p) => p.id));
+      const billing = ((billingRes.data ?? []) as any[]).filter((b) => b.plan_id && scopedPlanIds.has(b.plan_id));
       const societies = (societiesRes.data ?? []) as any[];
-      const trainers = (trainersRes.data ?? []) as any[];
-      const offRaw = (offRes.data ?? []) as any[];
+      // Trainers are per-admin too, so off-times only surface for this admin's trainers.
+      const trainers = ((trainersRes.data ?? []) as any[])
+        .filter((t) => (adminId ? t.assigned_admin_id === adminId : true));
+      const scopedTrainerIds = new Set(trainers.map((t) => t.id));
+      const offRaw = ((offRes.data ?? []) as any[])
+        .filter((o) => (adminId ? scopedTrainerIds.has(o.trainer_id) : true));
 
       const socName = new Map(societies.map((s) => [s.id, s.name]));
       const trName = new Map(trainers.map((t) => [t.id, t.name]));

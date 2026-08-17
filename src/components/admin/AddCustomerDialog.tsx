@@ -15,6 +15,7 @@ import {
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { isValidPhone, isValidDob, normalizePhone } from "@/lib/phoneAuth";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface Props {
   open: boolean;
@@ -24,6 +25,7 @@ interface Props {
 
 export function AddCustomerDialog({ open, onOpenChange, onCreated }: Props) {
   const qc = useQueryClient();
+  const { user } = useAuth();
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [dob, setDob] = useState<Date | undefined>(undefined);
@@ -69,25 +71,29 @@ export function AddCustomerDialog({ open, onOpenChange, onCreated }: Props) {
       // Get society name for the legacy text column
       const selectedSociety = societies.find((s) => s.id === societyId);
 
-      // 1. Insert into profiles
+      // 1. Insert into profiles — auto-assign to the admin creating them so the
+      //    customer immediately appears in that admin's scoped dashboard.
       const newId = crypto.randomUUID();
-      const { data: profileData, error: profileError } = await supabase
-        .from("profiles")
-        .insert({
-          id: newId,
-          name: name.trim(),
-          phone: normalizedPhone,
-          dob: dobString,
-          society_id: societyId || null,
-          society: selectedSociety?.name ?? null,
-          trainer_id: trainerId || null,
-          time_slot: timeSlot || null,
-        })
-        .select("id")
-        .single();
-
-      if (profileError || !profileData) {
-        throw new Error(profileError?.message ?? "Failed to create customer profile.");
+      const basePayload: Record<string, unknown> = {
+        id: newId,
+        name: name.trim(),
+        phone: normalizedPhone,
+        dob: dobString,
+        society_id: societyId || null,
+        society: selectedSociety?.name ?? null,
+        trainer_id: trainerId || null,
+        time_slot: timeSlot || null,
+        assigned_admin_id: user?.id ?? null,
+      };
+      let ins = await (supabase as any).from("profiles").insert(basePayload).select("id").single();
+      // If the assignment column isn't there yet, retry without it.
+      if (ins.error && /assigned_admin_id/.test(ins.error.message || "")) {
+        delete basePayload.assigned_admin_id;
+        ins = await (supabase as any).from("profiles").insert(basePayload).select("id").single();
+      }
+      const profileData = ins.data;
+      if (ins.error || !profileData) {
+        throw new Error(ins.error?.message ?? "Failed to create customer profile.");
       }
 
       // 2. CRITICAL: Insert into user_roles so admin dashboard finds this customer

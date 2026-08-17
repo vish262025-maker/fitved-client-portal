@@ -11,6 +11,8 @@ import { Switch } from "@/components/ui/switch";
 import { ClassCalendar } from "@/components/dashboard/ClassCalendar";
 import { toast } from "sonner";
 import { trackAdminActivity } from "@/lib/adminActivity";
+import { useAuth } from "@/contexts/AuthContext";
+import { useAdminsList } from "@/hooks/useAdminsList";
 
 type AppRole = "client" | "trainer" | "admin";
 
@@ -146,6 +148,8 @@ export function ProfileTab({ userId }: { userId: string }) {
     },
   });
   const [calExpanded, setCalExpanded] = useState(true);
+  const { impersonating } = useAuth();
+  const { data: admins = [] } = useAdminsList();
 
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
@@ -408,6 +412,25 @@ export function ProfileTab({ userId }: { userId: string }) {
               Saves as <span className="font-medium text-foreground">{composedSlot}</span>
               {trainerId && trainerSlots.length === 0 && " · this trainer has no slots defined yet — add them in Admin → Trainers"}
             </p>
+          )}
+
+          {/* Managing admin — assignment is the Super Admin's job only, so this
+              control is shown solely while the Super Admin is viewing an admin's
+              dashboard (impersonating). Regular admins never see or change it. */}
+          {impersonating && (
+            <div className="space-y-1.5 max-w-sm">
+              <Label>Managing admin</Label>
+              <Select value={assignedAdminId || "none"} onValueChange={(v) => setAssignedAdminId(v === "none" ? "" : v)}>
+                <SelectTrigger><SelectValue placeholder="Unassigned" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Unassigned</SelectItem>
+                  {admins.map((ad) => (
+                    <SelectItem key={ad.id} value={ad.id}>{ad.name || ad.phone || "Admin"}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">Which admin's dashboard this customer appears in.</p>
+            </div>
           )}
 
           <Button onClick={() => save.mutate()} disabled={save.isPending}>

@@ -8,6 +8,8 @@ import {
   computeReferrals, referralStatusLabel, REFERRAL_RATE,
   type ReferralRow, type ReferralStatus,
 } from "@/lib/referrals";
+import { useAuth } from "@/contexts/AuthContext";
+import { scopeByAdmin } from "@/lib/adminScope";
 
 const inr = (n: number) => `₹${Math.round(n).toLocaleString("en-IN")}`;
 
@@ -19,8 +21,10 @@ const STATUS_STYLE: Record<ReferralStatus, { bg: string; color: string }> = {
 };
 
 export default function AdminReferrals() {
+  const { user } = useAuth();
+  const adminId = user?.id ?? null;
   const { data, isError: tableMissing } = useQuery({
-    queryKey: ["admin-referrals"],
+    queryKey: ["admin-referrals", adminId],
     retry: false,
     queryFn: async () => {
       const { data: referrals, error } = await (supabase as any)
@@ -28,10 +32,12 @@ export default function AdminReferrals() {
       if (error) throw error;
       const refs = (referrals ?? []) as ReferralRow[];
 
-      const [{ data: trainers }, { data: profiles }] = await Promise.all([
-        supabase.from("trainers").select("id, name"),
+      const [{ data: allTrainers }, { data: profiles }] = await Promise.all([
+        supabase.from("trainers").select("id, name, assigned_admin_id"),
         supabase.from("profiles").select("id, phone").in("phone", refs.map((r) => r.referred_phone).length ? refs.map((r) => r.referred_phone) : ["__none__"]),
       ]);
+      // Referrals belong to trainers, so scope to this admin's trainers only.
+      const trainers = scopeByAdmin((allTrainers ?? []) as any[], adminId);
       const ids = (profiles ?? []).map((p) => p.id);
       const { data: billing } = ids.length
         ? await supabase.from("billing_history").select("user_id, amount, payment_date, type").in("user_id", ids)
@@ -39,7 +45,7 @@ export default function AdminReferrals() {
 
       return {
         refs,
-        trainers: (trainers ?? []) as { id: string; name: string }[],
+        trainers: trainers as { id: string; name: string }[],
         profiles: profiles ?? [],
         billing: billing ?? [],
       };
