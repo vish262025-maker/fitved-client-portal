@@ -78,7 +78,7 @@ export default function LocationSEOPage() {
       <main className="container mx-auto max-w-4xl px-4 py-12 flex-1 space-y-12">
         {page.hero_image && (
           <div className="rounded-2xl overflow-hidden border border-border aspect-video shadow-md">
-            <img src={page.hero_image} alt={page.title} className="h-full w-full object-cover" onError={(e) => { (e.target as HTMLImageElement).src = "/images/blog/default.webp"; }} />
+            <img src={page.hero_image} alt={page.title} className="h-full w-full object-cover" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
           </div>
         )}
 

@@ -192,7 +192,7 @@ export default function BlogLanding() {
               {SEED_TOPIC_HUBS.map((hub) => (
                 <div key={hub.id} className="group relative rounded-2xl overflow-hidden border border-border bg-card shadow-sm hover:shadow-md transition-all">
                   <div className="h-44 relative bg-muted overflow-hidden">
-                    <img src={hub.hero_image} alt={hub.name} className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105" onError={(e) => { (e.target as HTMLImageElement).src = "/images/blog/default.webp"; }} />
+                    <img src={hub.hero_image} alt={hub.name} className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
                     <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-slate-950/20 to-transparent" />
                     <div className="absolute bottom-3 left-4 right-4">
                       <h3 className="text-lg font-bold text-white">{hub.name}</h3>
