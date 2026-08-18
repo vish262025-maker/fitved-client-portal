@@ -4,6 +4,7 @@ User-agent: *
 Allow: /$
 Allow: /corporate
 Allow: /trainers
+Allow: /trainers/*
 Allow: /blog/
 Allow: /blog/*
 Allow: /faqs
@@ -18,6 +19,38 @@ Allow: /prenatal-postnatal-yoga
 Allow: /clinical-fitness-bangalore
 Allow: /womens-fitness-bangalore
 Allow: /diet-coaching-bangalore
+Allow: /personal-trainer/*
+Allow: /yoga/*
+Allow: /online-yoga/*
+Allow: /strength-training/*
+Allow: /vegetarian-muscle-building/*
+Allow: /corporate-wellness/*
+Allow: /compare/*
+Allow: /online-personal-trainer/*
+Allow: /female-personal-trainer/*
+Allow: /pcos-fitness-coach/*
+Allow: /diabetes-fitness-coach/*
+Allow: /thyroid-fitness-coach/*
+Allow: /diabetes-reversal-coach/*
+Allow: /glp1-mounjaro-coach/*
+Allow: /postpartum-weight-loss/*
+Allow: /diastasis-recti-recovery/*
+Allow: /post-pregnancy-weight-loss-coach/*
+Allow: /lactation-safe-weight-loss/*
+Allow: /prenatal-yoga/*
+Allow: /yoga-trainer/*
+Allow: /pilates-trainer/*
+Allow: /weight-loss-coach/*
+Allow: /fat-loss-trainer/*
+Allow: /powerlifting-coach/*
+Allow: /indian-fat-loss-guide
+Allow: /bmi-calculator
+Allow: /calorie-calculator
+Allow: /macro-calculator
+Allow: /ideal-weight-calculator
+Allow: /tdee-calculator
+Allow: /daily-calorie-burn-calculator
+Allow: /societies/
 
 # Block authenticated app routes
 Disallow: /dashboard
@@ -30,6 +63,7 @@ Disallow: /pause
 Disallow: /plan
 Disallow: /health
 Disallow: /profile
+Disallow: /super-admin
 Disallow: /societies/admin
 Disallow: /societies/404
 

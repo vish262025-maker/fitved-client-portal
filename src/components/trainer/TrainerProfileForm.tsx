@@ -19,6 +19,7 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { SPECIALIZATIONS } from "@/lib/specializations";
 import { CITIES, areasForCity } from "@/lib/cities";
+import { buildTrainerSlug } from "@/lib/trainerSlug";
 
 const LANGUAGES = [
   "English", "Hindi", "Kannada", "Tamil", "Telugu", "Malayalam", "Marathi",
@@ -46,6 +47,47 @@ type Seed = {
   availOnline: boolean; availOffline: boolean;
   instagram: string; website: string; facebook: string;
 };
+
+/** Your unique, shareable public profile URL with a one-tap copy button. */
+function ShareProfileLink({ slug }: { slug: string }) {
+  const [copied, setCopied] = useState(false);
+  const url = `${typeof window !== "undefined" ? window.location.origin : ""}/trainers/${slug}`;
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+      toast.success("Profile link copied");
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      toast.error("Couldn't copy — long-press the link to copy it");
+    }
+  };
+  return (
+    <div className="mx-5 md:mx-6 mt-5 rounded-xl border p-4" style={{ background: "rgba(30,58,95,0.04)", borderColor: "rgba(30,58,95,0.15)" }}>
+      <div className="flex items-center gap-2 mb-2">
+        <Link2 className="h-4 w-4" style={{ color: NAVY }} />
+        <p className="font-semibold text-sm text-foreground">Your shareable profile link</p>
+      </div>
+      <p className="text-xs text-muted-foreground mb-3">
+        Share this anywhere — Instagram bio, WhatsApp, business cards. It always opens your public FitVed profile.
+      </p>
+      <div className="flex flex-col sm:flex-row gap-2">
+        <a href={url} target="_blank" rel="noopener noreferrer"
+          className="flex-1 min-w-0 truncate rounded-lg border bg-white px-3 py-2 text-sm text-foreground hover:underline">
+          {url.replace(/^https?:\/\//, "")}
+        </a>
+        <div className="flex gap-2 shrink-0">
+          <Button type="button" size="sm" variant="outline" onClick={copy} className="gap-1.5">
+            {copied ? "Copied!" : "Copy link"}
+          </Button>
+          <Button type="button" size="sm" variant="ghost" asChild className="gap-1.5">
+            <a href={url} target="_blank" rel="noopener noreferrer"><ExternalLink className="h-4 w-4" /> View</a>
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 /** Small labelled section header (icon chip + title). */
 function SectionHeader({ icon: Icon, title, note }: { icon: any; title: string; note?: string }) {
@@ -93,7 +135,7 @@ export default function TrainerProfileForm({
     queryFn: async () => {
       const { data, error } = await sb
         .from("trainers")
-        .select("name, education, years_experience, clients_trained, social_link, service_areas, specializations, bio, cv_path, photo_path, gender, about, city, languages, availability_online, availability_offline, instagram, website, facebook, updated_at")
+        .select("name, education, years_experience, clients_trained, social_link, service_areas, specializations, bio, cv_path, photo_path, gender, about, city, languages, availability_online, availability_offline, instagram, website, facebook, updated_at, slug")
         .eq("id", trainerId)
         .maybeSingle();
       if (error) return { __notReady: true } as const;
@@ -340,6 +382,8 @@ export default function TrainerProfileForm({
         facebook: facebook.trim() || null,
         photo_path: nextPhoto,
         cv_path: nextCv,
+        // Keep the shareable public URL in sync with name + specialization.
+        slug: buildTrainerSlug(name, specializations, trainerId),
         updated_at: new Date().toISOString(),
       }).eq("id", trainerId);
       if (updErr) throw updErr;
@@ -410,6 +454,11 @@ export default function TrainerProfileForm({
           </Button>
         </div>
       </div>
+
+      {/* Shareable public profile link */}
+      <ShareProfileLink
+        slug={(details.data as any)?.slug || buildTrainerSlug(name, specializations, trainerId)}
+      />
 
       <div className="p-5 md:p-6 space-y-9">
         {/* Profile picture */}

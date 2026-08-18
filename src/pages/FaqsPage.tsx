@@ -4,6 +4,8 @@ import { ArrowLeft, ArrowRight, ShieldCheck, ChevronDown, ChevronUp } from "luci
 import { Button } from "@/components/ui/button";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import fitvedLogo from "@/assets/fitved-logo.png";
+import { BlogSeo } from "@/components/blog/BlogSeo";
+import { SITE_URL } from "@/lib/blog/seo";
 
 export default function FaqsPage() {
   const [activeCategory, setActiveCategory] = useState("all");
@@ -139,8 +141,36 @@ export default function FaqsPage() {
 
   const filteredFaqs = activeCategory === "all" ? faqs : faqs.filter((f) => f.cat === activeCategory);
 
+  const faqSchema = {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    mainEntity: faqs.map((f) => ({
+      "@type": "Question",
+      name: f.q,
+      acceptedAnswer: { "@type": "Answer", text: f.a },
+    })),
+  };
+
+  const breadcrumbSchema = {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "Home", item: SITE_URL },
+      { "@type": "ListItem", position: 2, name: "FAQs", item: `${SITE_URL}/faqs` },
+    ],
+  };
+
   return (
     <div className="min-h-screen bg-fv-navy text-white flex flex-col justify-between">
+      <BlogSeo
+        title="Frequently Asked Questions — Personal Training, Yoga & Fitness | FitVed"
+        description="Find answers to common questions about FitVed's personal training, yoga classes, pricing, society fitness, senior programs, prenatal yoga, and nutrition coaching in Bangalore."
+        canonical={`${SITE_URL}/faqs`}
+        image={`${SITE_URL}/fitved-logo.png`}
+        type="website"
+        keywords={["FAQ", "personal trainer Bangalore", "yoga classes FAQ", "fitness pricing", "society gym training"]}
+        jsonLd={[faqSchema, breadcrumbSchema]}
+      />
       <header className="sticky top-0 z-50 border-b border-white/10 bg-fv-navy/95 backdrop-blur">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
           <Link to="/" className="flex items-center gap-2">

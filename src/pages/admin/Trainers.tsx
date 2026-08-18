@@ -23,6 +23,7 @@ import TrainerReviewDialog from "@/components/admin/TrainerReviewDialog";
 import { SPECIALIZATIONS } from "@/lib/specializations";
 import { useAuth } from "@/contexts/AuthContext";
 import { scopeByAdmin } from "@/lib/adminScope";
+import { buildTrainerSlug } from "@/lib/trainerSlug";
 import { trackAdminActivity } from "@/lib/adminActivity";
 import { useAdminsList } from "@/hooks/useAdminsList";
 
@@ -468,6 +469,12 @@ export default function Trainers() {
       if (trainerId) {
         await (supabase as any).from("trainers")
           .update({ assigned_admin_id: assignedAdminId || adminId || null }).eq("id", trainerId);
+      }
+
+      // Refresh the shareable public slug from the current name + specialization.
+      if (trainerId) {
+        await (supabase as any).from("trainers")
+          .update({ slug: buildTrainerSlug(name, specializations, trainerId) }).eq("id", trainerId);
       }
 
       // sync trainer_societies

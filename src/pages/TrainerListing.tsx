@@ -12,6 +12,8 @@ import {
   Search, BadgeCheck, MapPin, Clock, Users, Wifi, Home, X, ArrowRight, ArrowLeft, SlidersHorizontal,
 } from "lucide-react";
 import { FitvedLogo } from "@/components/FitvedLogo";
+import { BlogSeo } from "@/components/blog/BlogSeo";
+import { SITE_URL } from "@/lib/blog/seo";
 
 const BUCKET = "trainer-assets";
 const PAGE = 9;
@@ -70,9 +72,12 @@ export default function TrainerListing() {
   const [visible, setVisible] = useState(PAGE);
   const [showFilters, setShowFilters] = useState(false);
 
-  useEffect(() => {
-    document.title = "Find Certified Personal Trainers & Yoga Coaches | FitVed";
-  }, []);
+  const trainerListingSeo = {
+    title: "Find Certified Personal Trainers & Yoga Coaches Near You | FitVed",
+    description: "Browse FitVed's certified personal trainers and yoga coaches. Filter by city, specialization, experience, and availability. Book a free trial session at your doorstep in Bangalore and across India.",
+    canonical: `${SITE_URL}/trainers`,
+    image: `${SITE_URL}/fitved-logo.png`,
+  };
 
   const q = useQuery({
     queryKey: ["public-trainers"],
@@ -130,8 +135,40 @@ export default function TrainerListing() {
   const activeFilterCount = [city, area, gender, exp].filter(Boolean).length + (online ? 1 : 0) + (offline ? 1 : 0) + languages.length + specs.length;
   const clearAll = () => { setCity(""); setArea(""); setOnline(false); setOffline(false); setGender(""); setExp(""); setLanguages([]); setSpecs([]); };
 
+  const trainerCount = all.length;
+  const itemListSchema = trainerCount > 0 ? {
+    "@context": "https://schema.org",
+    "@type": "ItemList",
+    name: "FitVed Certified Trainers",
+    description: "Browse certified personal trainers and yoga coaches on FitVed",
+    numberOfItems: trainerCount,
+    itemListElement: all.slice(0, 20).map((t, i) => ({
+      "@type": "ListItem",
+      position: i + 1,
+      url: `${SITE_URL}/trainers/${t.slug || t.id}`,
+      name: cardName(t.name),
+    })),
+  } : null;
+
+  const breadcrumbSchema = {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "Home", item: SITE_URL },
+      { "@type": "ListItem", position: 2, name: "Trainers", item: `${SITE_URL}/trainers` },
+    ],
+  };
+
   return (
     <div className="bg-fv-neutral min-h-screen">
+      <BlogSeo
+        title={trainerListingSeo.title}
+        description={trainerListingSeo.description}
+        canonical={trainerListingSeo.canonical}
+        image={trainerListingSeo.image}
+        type="website"
+        jsonLd={[itemListSchema, breadcrumbSchema]}
+      />
       {/* Hero */}
       <section className="relative overflow-hidden bg-fv-navy text-white">
         <div className="pointer-events-none absolute inset-0 opacity-[0.18]"

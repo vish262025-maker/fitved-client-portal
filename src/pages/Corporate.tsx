@@ -16,6 +16,8 @@ import {
   Dumbbell, HeartHandshake, Star, Sparkles, ArrowRight, Phone,
   Zap, Shield, Clock, MapPin,
 } from "lucide-react";
+import { BlogSeo } from "@/components/blog/BlogSeo";
+import { SITE_URL } from "@/lib/blog/seo";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 interface B2BLead {
@@ -35,8 +37,35 @@ function scrollTo(id: string) {
 
 // ── Main page ──────────────────────────────────────────────────────────────────
 export default function Corporate() {
+  const serviceSchema = {
+    "@context": "https://schema.org",
+    "@type": "Service",
+    name: "FitVed Corporate Wellness Program",
+    description: "On-site yoga, fitness, and wellness programs for offices, co-working spaces, and tech parks in Bangalore. Certified trainers, flexible scheduling, zero logistics overhead.",
+    provider: { "@type": "Organization", name: "FitVed", url: SITE_URL },
+    serviceType: "Corporate Wellness",
+    areaServed: { "@type": "City", name: "Bengaluru" },
+    url: `${SITE_URL}/corporate`,
+  };
+  const breadcrumb = {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "Home", item: SITE_URL },
+      { "@type": "ListItem", position: 2, name: "Corporate Wellness", item: `${SITE_URL}/corporate` },
+    ],
+  };
   return (
     <div className="min-h-screen bg-white font-sans text-fv-text">
+      <BlogSeo
+        title="Corporate Wellness Programs — On-Site Yoga & Fitness for Offices | FitVed"
+        description="Boost employee wellness with FitVed's corporate fitness programs. On-site yoga, strength training, and wellness workshops for offices and tech parks in Bangalore. Zero logistics overhead."
+        canonical={`${SITE_URL}/corporate`}
+        image={`${SITE_URL}/fitved-logo.png`}
+        type="website"
+        keywords={["corporate wellness Bangalore", "office yoga", "employee fitness program", "on-site trainer", "workplace wellness"]}
+        jsonLd={[serviceSchema, breadcrumb]}
+      />
       <CorporateNav />
       <Hero />
       <TrustedBy />

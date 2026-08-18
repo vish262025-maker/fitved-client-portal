@@ -793,3 +793,63 @@ export function getGeoPageData(path: string): GeoPageData | null {
 
   return null;
 }
+
+export function getAllGeoPagePaths(): string[] {
+  const paths: string[] = [];
+  const ptCities = [
+    "bangalore", "mumbai", "delhi-ncr", "pune", "hyderabad", "chennai",
+    "kolkata", "ahmedabad", "gurgaon", "noida", "greater-noida", "faridabad",
+    "jaipur", "lucknow", "chandigarh", "indore", "coimbatore", "kochi",
+    "thiruvananthapuram", "bhubaneswar", "guwahati", "nagpur", "visakhapatnam",
+    "mysore", "mangalore", "surat", "vadodara", "usa-nri",
+    "usa/indian-americans", "usa/texas", "usa/new-jersey", "usa/bay-area",
+    "uk", "canada", "australia", "dubai", "abu-dhabi", "singapore", "germany",
+  ];
+  ptCities.forEach((c) => paths.push(`/personal-trainer/${c}`));
+  paths.push("/personal-trainer/bangalore/home-training", "/personal-trainer/bangalore/cost");
+
+  const yogaCities = ["mumbai", "delhi-ncr", "pune", "kolkata", "gurgaon", "noida", "usa-nri", "nri"];
+  yogaCities.forEach((c) => paths.push(`/yoga/${c}`));
+
+  const strengthCities = ["bangalore", "mumbai", "delhi-ncr", "pune", "kolkata", "usa-nri", "noida"];
+  strengthCities.forEach((c) => paths.push(`/strength-training/${c}`));
+
+  const vegCities = ["bangalore", "mumbai", "delhi-ncr", "pune", "usa"];
+  vegCities.forEach((c) => paths.push(`/vegetarian-muscle-building/${c}`));
+
+  const cwPages = [
+    "india", "bangalore", "mumbai", "delhi-ncr", "pune", "hyderabad", "chennai", "yoga", "employee-fitness",
+  ];
+  cwPages.forEach((c) => paths.push(`/corporate-wellness/${c}`));
+
+  const comparisons = [
+    "personal-trainer-vs-cultfit", "personal-trainer-vs-curefit", "personal-trainer-vs-cult-pass-live",
+    "personal-trainer-vs-healthifyme", "personal-trainer-vs-fittr", "personal-trainer-vs-anytime-fitness",
+    "personal-trainer-vs-gym-membership",
+  ];
+  comparisons.forEach((c) => paths.push(`/compare/${c}`));
+
+  const calculators = [
+    "bmi-calculator", "calorie-calculator", "macro-calculator",
+    "ideal-weight-calculator", "tdee-calculator", "daily-calorie-burn-calculator",
+  ];
+  calculators.forEach((c) => paths.push(`/${c}`));
+
+  const specialties = [
+    "/online-personal-trainer/india", "/female-personal-trainer/india",
+    "/pcos-fitness-coach/bengaluru", "/diabetes-fitness-coach/bengaluru",
+    "/thyroid-fitness-coach/bengaluru", "/diabetes-reversal-coach/india",
+    "/diabetes-reversal-coach/bangalore", "/glp1-mounjaro-coach/india",
+    "/postpartum-weight-loss/india", "/diastasis-recti-recovery/india",
+    "/post-pregnancy-weight-loss-coach/india", "/lactation-safe-weight-loss/india",
+    "/online-yoga/india", "/online-yoga/hatha", "/online-yoga/vinyasa",
+    "/prenatal-yoga/india", "/prenatal-yoga/mumbai", "/prenatal-yoga/kolkata",
+    "/prenatal-yoga/usa-nri", "/yoga-trainer/bangalore",
+    "/pilates-trainer/bangalore", "/weight-loss-coach/bangalore",
+    "/fat-loss-trainer/bengaluru", "/powerlifting-coach/bangalore",
+    "/indian-fat-loss-guide",
+  ];
+  specialties.forEach((s) => paths.push(s));
+
+  return paths;
+}
