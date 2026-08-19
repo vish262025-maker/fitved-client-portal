@@ -12,6 +12,11 @@ dist
 dist-ssr
 *.local
 
+# Source testimonial videos (661MB) — compressed versions are hosted on
+# Supabase Storage (trainer-assets/testimonials/), never committed to the repo.
+Testimonials/
+Testimonials /
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
@@ -32,3 +37,7 @@ dist-ssr
 # Firebase Admin SDK service-account key (secret — never commit)
 scripts/firebase-service-account.json
 /public/booking-config.js
+# Google service account key (DO NOT COMMIT)
+fitved-seo-bot.json
+seo-report.json
+seo-weekly-report.md

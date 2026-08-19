@@ -1,5 +1,5 @@
-import React, { useState, useMemo } from "react";
-import { Link } from "react-router-dom";
+import React, { useState, useMemo, useEffect } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 import { ARTICLES_DATA } from "@/data/blog/articles";
 import { CATEGORIES_DATA } from "@/data/blog/categories";
 import { SEED_TOPIC_HUBS } from "@/lib/blog/seedData";
@@ -17,11 +17,12 @@ import { searchStaticArticles } from "@/lib/blog/searchIndex";
 import { resolveFeaturedImage, resolveImageAltText } from "@/lib/blog/featuredImageMap";
 
 export default function BlogLanding() {
-  const [searchTerm, setSearchTerm] = useState("");
-  const [selectedCatSlug, setSelectedCatSlug] = useState<string>("all");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchTerm, setSearchTerm] = useState(searchParams.get("q") || "");
+  const [selectedCatSlug, setSelectedCatSlug] = useState<string>(searchParams.get("cat") || "all");
   const [emailSub, setEmailSub] = useState("");
   const [subDone, setSubDone] = useState(false);
-  const [currentPage, setCurrentPage] = useState(1);
+  const [currentPage, setCurrentPage] = useState(Number(searchParams.get("page")) || 1);
   const pageSize = 12;
 
   // Filter static articles (508 articles dataset)
@@ -54,6 +55,14 @@ export default function BlogLanding() {
     setSelectedCatSlug("all");
     setCurrentPage(1);
   };
+
+  useEffect(() => {
+    const p = new URLSearchParams();
+    if (searchTerm) p.set("q", searchTerm);
+    if (selectedCatSlug && selectedCatSlug !== "all") p.set("cat", selectedCatSlug);
+    if (currentPage > 1) p.set("page", String(currentPage));
+    setSearchParams(p, { replace: true });
+  }, [searchTerm, selectedCatSlug, currentPage, setSearchParams]);
 
   const breadcrumbs = [{ name: "Home", url: "/" }, { name: "FitVed Journal", url: "/blog" }];
 

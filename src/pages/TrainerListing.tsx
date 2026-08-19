@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -59,16 +59,17 @@ function CardSkeleton() {
 
 export default function TrainerListing() {
   const sb = supabase as any;
-  const [search, setSearch] = useState("");
-  const [city, setCity] = useState("");
-  const [area, setArea] = useState("");
-  const [online, setOnline] = useState(false);
-  const [offline, setOffline] = useState(false);
-  const [exp, setExp] = useState("");
-  const [gender, setGender] = useState("");
-  const [languages, setLanguages] = useState<string[]>([]);
-  const [specs, setSpecs] = useState<string[]>([]);
-  const [sort, setSort] = useState("experienced");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [search, setSearch] = useState(searchParams.get("q") || "");
+  const [city, setCity] = useState(searchParams.get("city") || "");
+  const [area, setArea] = useState(searchParams.get("area") || "");
+  const [online, setOnline] = useState(searchParams.get("online") === "1");
+  const [offline, setOffline] = useState(searchParams.get("offline") === "1");
+  const [exp, setExp] = useState(searchParams.get("exp") || "");
+  const [gender, setGender] = useState(searchParams.get("gender") || "");
+  const [languages, setLanguages] = useState<string[]>(searchParams.get("lang")?.split(",").filter(Boolean) ?? []);
+  const [specs, setSpecs] = useState<string[]>(searchParams.get("spec")?.split(",").filter(Boolean) ?? []);
+  const [sort, setSort] = useState(searchParams.get("sort") || "experienced");
   const [visible, setVisible] = useState(PAGE);
   const [showFilters, setShowFilters] = useState(false);
 
@@ -130,6 +131,21 @@ export default function TrainerListing() {
 
   useEffect(() => { setVisible(PAGE); }, [search, city, area, online, offline, gender, exp, languages, specs, sort]);
 
+  useEffect(() => {
+    const p = new URLSearchParams();
+    if (search) p.set("q", search);
+    if (city) p.set("city", city);
+    if (area) p.set("area", area);
+    if (online) p.set("online", "1");
+    if (offline) p.set("offline", "1");
+    if (exp) p.set("exp", exp);
+    if (gender) p.set("gender", gender);
+    if (languages.length) p.set("lang", languages.join(","));
+    if (specs.length) p.set("spec", specs.join(","));
+    if (sort && sort !== "experienced") p.set("sort", sort);
+    setSearchParams(p, { replace: true });
+  }, [search, city, area, online, offline, exp, gender, languages, specs, sort, setSearchParams]);
+
   const toggle = (arr: string[], set: (v: string[]) => void, v: string) =>
     set(arr.includes(v) ? arr.filter((x) => x !== v) : [...arr, v]);
   const activeFilterCount = [city, area, gender, exp].filter(Boolean).length + (online ? 1 : 0) + (offline ? 1 : 0) + languages.length + specs.length;
@@ -178,9 +194,14 @@ export default function TrainerListing() {
             <Link to="/" aria-label="FitVed home" className="inline-flex items-center rounded-xl bg-white px-3 py-1.5 shadow-sm transition-transform hover:scale-[1.03]">
               <FitvedLogo className="h-6 w-auto" showWord />
             </Link>
-            <Link to="/" className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3.5 py-1.5 text-xs font-semibold text-white/85 ring-1 ring-white/15 transition-colors hover:bg-white/15">
-              <ArrowLeft className="h-3.5 w-3.5" /> Back to home
-            </Link>
+            <div className="flex items-center gap-3">
+              <Link to="/trainer/signup" className="inline-flex items-center gap-1.5 rounded-full bg-fv-orange px-3.5 py-1.5 text-xs font-bold text-white ring-1 ring-fv-orange/50 transition-colors hover:bg-fv-orange/90">
+                Join as a Trainer
+              </Link>
+              <Link to="/" className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3.5 py-1.5 text-xs font-semibold text-white/85 ring-1 ring-white/15 transition-colors hover:bg-white/15">
+                <ArrowLeft className="h-3.5 w-3.5" /> Back to home
+              </Link>
+            </div>
           </div>
           <h1 className="mx-auto mt-2 max-w-3xl font-display text-[2.6rem] font-semibold leading-[1.02] tracking-tight md:text-[4.25rem]">
             Find Your <span className="text-fv-orange">Certified Trainer</span>

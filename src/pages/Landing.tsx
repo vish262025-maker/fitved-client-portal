@@ -228,11 +228,11 @@ export default function Landing() {
         {/* Question 3 & 4: What services & Who is it for? (Merged) */}
         <Services />
 
+        {/* Client video testimonials */}
+        <VideoTestimonials />
+
         {/* Question 5: Meet trainers */}
         <Trainers />
-
-        {/* Question 6: Success stories */}
-        <Testimonials />
 
         {/* Section 1: Where We Train & Flagship Programs */}
         <section id="locations" className="pt-16 pb-12 md:pt-28 md:pb-16 bg-fv-navy border-t border-white/10">
@@ -1470,6 +1470,134 @@ function Gallery() {
   );
 }
 
+/* ---------- VIDEO TESTIMONIALS ---------- */
+// Videos are hosted on Supabase Storage (CDN-backed) so the ~19MB of clips
+// never bloat the repo/bundle and stream fast. Compressed to 720×1280 H.264.
+const TVID_BUCKET = "trainer-assets";
+const tvidUrl = (file: string) =>
+  supabase.storage.from(TVID_BUCKET).getPublicUrl(`testimonials/${file}`).data.publicUrl;
+
+interface VideoTestimonial {
+  id: number;
+  video: string;
+  poster: string;
+}
+
+const VIDEO_TESTIMONIALS: VideoTestimonial[] = [1, 2, 3, 4].map((n) => ({
+  id: n,
+  video: tvidUrl(`testimonial-${n}.mp4`),
+  poster: tvidUrl(`testimonial-${n}.jpg`),
+}));
+
+function VideoTestimonials() {
+  const ref = useReveal(0.1);
+  const [active, setActive] = useState<VideoTestimonial | null>(null);
+
+  const VideoCard = ({ t }: { t: VideoTestimonial }) => (
+    <button
+      type="button"
+      onClick={() => setActive(t)}
+      aria-label="Play client testimonial video"
+      className="group relative block aspect-[9/16] w-full overflow-hidden rounded-2xl border border-white/10 bg-black shadow-card transition-all duration-300 hover:-translate-y-1 hover:border-fv-orange/40 hover:shadow-elevated"
+    >
+      <video
+        src={t.video}
+        poster={t.poster}
+        muted
+        loop
+        autoPlay
+        playsInline
+        preload="metadata"
+        className="h-full w-full object-cover"
+      />
+      {/* Gradient + play affordance */}
+      <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-fv-navy/70 via-transparent to-transparent" />
+      <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+        <span className="grid h-12 w-12 place-items-center rounded-full bg-white/15 ring-1 ring-white/40 backdrop-blur-sm transition-transform duration-300 group-hover:scale-110 group-hover:bg-fv-orange">
+          <svg viewBox="0 0 24 24" className="ml-0.5 h-5 w-5 fill-white" aria-hidden="true"><path d="M8 5v14l11-7z" /></svg>
+        </span>
+      </div>
+      <span className="pointer-events-none absolute left-3 top-3 inline-flex items-center gap-1 rounded-full bg-white/95 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-fv-navy shadow-sm">
+        <ShieldCheck className="h-3 w-3 text-fv-orange" /> Verified
+      </span>
+      <span className="pointer-events-none absolute bottom-3 left-3 right-3 text-left text-[11px] font-semibold text-white/90">
+        Real FitVed member story
+      </span>
+    </button>
+  );
+
+  return (
+    <section id="video-testimonials" className="py-12 md:py-20 bg-fv-navy border-t border-white/10 overflow-hidden">
+      <div className="fluid-container-testimonials">
+        <div className="text-center max-w-2xl mx-auto">
+          <div className="flex items-center justify-center gap-2 mb-2">
+            <span className="h-px w-8 bg-fv-orange" />
+            <span className="text-xs font-bold uppercase tracking-widest text-fv-orange">Real Stories</span>
+            <span className="h-px w-8 bg-fv-orange" />
+          </div>
+          <h2 className="font-sans font-black uppercase fluid-heading">
+            CLIENT <span className="text-fv-orange">TESTIMONIALS</span>
+          </h2>
+          <p className="mt-2.5 text-white/60 fluid-body">
+            Hear directly from FitVed members training inside their own societies. Tap any video to play with sound.
+          </p>
+        </div>
+
+        {/* Desktop: horizontal infinite marquee (matches Meet Your Trainers) */}
+        <div ref={ref} className="reveal hidden sm:block mt-6 relative overflow-hidden">
+          <div className="pointer-events-none absolute inset-y-0 left-0 w-24 bg-gradient-to-r from-fv-navy to-transparent z-10" />
+          <div className="pointer-events-none absolute inset-y-0 right-0 w-24 bg-gradient-to-l from-fv-navy to-transparent z-10" />
+          <div className="marquee-track py-3">
+            {[...VIDEO_TESTIMONIALS, ...VIDEO_TESTIMONIALS].map((t, i) => (
+              <div key={`${t.id}-${i}`} className="w-[240px] shrink-0 mx-2">
+                <VideoCard t={t} />
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Mobile: clean full-width carousel */}
+        <div className="sm:hidden mt-6 relative">
+          <Carousel opts={{ align: "start", loop: true }} className="w-full">
+            <CarouselContent className="-ml-2">
+              {VIDEO_TESTIMONIALS.map((t) => (
+                <CarouselItem key={t.id} className="pl-2 basis-[72%]">
+                  <VideoCard t={t} />
+                </CarouselItem>
+              ))}
+            </CarouselContent>
+            <div className="mt-4 flex items-center justify-center gap-3">
+              <CarouselPrevious className="static translate-y-0 h-9 w-9 bg-white/10 border-white/20 text-white hover:bg-fv-orange hover:border-fv-orange" />
+              <CarouselNext className="static translate-y-0 h-9 w-9 bg-white/10 border-white/20 text-white hover:bg-fv-orange hover:border-fv-orange" />
+            </div>
+          </Carousel>
+        </div>
+      </div>
+
+      {/* Fullscreen play-with-sound modal */}
+      <Dialog open={!!active} onOpenChange={(o) => !o && setActive(null)}>
+        <DialogContent className="max-w-sm border-white/10 bg-fv-navy p-2 sm:p-3">
+          <DialogHeader className="sr-only">
+            <DialogTitle>Client testimonial</DialogTitle>
+            <DialogDescription>A FitVed member shares their experience.</DialogDescription>
+          </DialogHeader>
+          {active && (
+            <video
+              key={active.id}
+              src={active.video}
+              poster={active.poster}
+              controls
+              autoPlay
+              playsInline
+              className="aspect-[9/16] w-full rounded-xl bg-black object-cover"
+            />
+          )}
+        </DialogContent>
+      </Dialog>
+    </section>
+  );
+}
+
 /* ---------- TRAINERS (Team) ---------- */
 interface TrainerData {
   name: string;
@@ -1681,173 +1809,6 @@ function Trainers() {
             </div>
           </Carousel>
         </div>
-      </div>
-    </section>
-  );
-}
-
-interface CaseStudyData {
-  name: string;
-  location: string;
-  trainer: string;
-  duration: string;
-  problem: string;
-  solution: string;
-  beforeAfter: string;
-  medicalWin: string;
-  lifestyleWin: string;
-  quote: string;
-}
-
-function Testimonials() {
-  const caseStudies: CaseStudyData[] = [
-    {
-      name: "Amit Sharma",
-      location: "Sobha City, Sarjapur",
-      trainer: "Pramod Palve",
-      duration: "12 Weeks",
-      problem: "Visceral fat buildup, desk-job posture fatigue, 0 time for commercial gym commute.",
-      solution: "1-on-1 society strength training 3×/week + metabolic Indian nutrition plan.",
-      beforeAfter: "Body Fat: 28% ➔ 19% | Visceral Fat: -4 Level",
-      medicalWin: "Reduced blood lipid risk profile under annual health review",
-      lifestyleWin: "Zero commute stress — trained 45 mins before work in society clubhouse",
-      quote: "FitVed is the first program where I actually stuck to the plan. 12 weeks in my building, zero travel.",
-    },
-    {
-      name: "Meena Iyer",
-      location: "Lakeside Habitat, Varthur",
-      trainer: "Suma Paniraj",
-      duration: "16 Weeks",
-      problem: "Hypertension, chronic knee stiffness, and thyroid-related weight gain at age 62.",
-      solution: "Therapeutic senior yoga + low-impact isometric strengthening 3×/week.",
-      beforeAfter: "Joint Range: +40% | Mobility Score: 85/100",
-      medicalWin: "Treating physician reduced daily BP medication dosage",
-      lifestyleWin: "Climbs 3 flights of society stairs effortlessly without knee pain",
-      quote: "My doctor was amazed by my annual checkup. Suma's patience and medical knowledge are unmatched.",
-    },
-    {
-      name: "Sunita V.",
-      location: "Salarpuria Senorita, HSR Layout",
-      trainer: "Dhruvi Patel",
-      duration: "20 Weeks",
-      problem: "Type-2 diabetes (HbA1c 7.8), severe lower back sciatica pain from desk work.",
-      solution: "Spinal decompression yoga + progressive resistance training 3×/week.",
-      beforeAfter: "HbA1c: 7.8 ➔ 6.1 | Sciatica Pain: 8/10 ➔ 0/10",
-      medicalWin: "Reversed pre-diabetic glucose spikes without extreme dieting",
-      lifestyleWin: "Sit pain-free for 8-hour workdays; double energy levels in evenings",
-      quote: "My HbA1c dropped from 7.8 to 6.1 in 5 months. Combining strength and yoga changed everything.",
-    },
-    {
-      name: "Karthik R.",
-      location: "Adarsh Palm Retreat, Bellandur",
-      trainer: "Pramod Palve",
-      duration: "12 Weeks",
-      problem: "Failed 3 gym memberships; needed weight loss without sacrificing corporate travel schedule.",
-      solution: "Hybrid 1-on-1 society workouts + mobile app travel workout carryover.",
-      beforeAfter: "Weight: -11 kg | Waist Circumference: -4.5 inches",
-      medicalWin: "Restored normal resting heart rate (78 bpm ➔ 64 bpm)",
-      lifestyleWin: "Maintained workout streak across 4 business trips with online check-ins",
-      quote: "FitVed is the only personal training program built for busy tech founders in Bangalore.",
-    },
-    {
-      name: "Anjali P.",
-      location: "Mantri Espana, Bellandur",
-      trainer: "Suma Paniraj",
-      duration: "16 Weeks",
-      problem: "Post-knee surgery rehab (ACL/Meniscus); fear of re-injury during physical activity.",
-      solution: "Doctor-aligned clinical rehab exercise + progressive knee stabilizer drills.",
-      beforeAfter: "Knee Extension: 100% Restored | Quad Strength: +65%",
-      medicalWin: "Full medical clearance achieved 4 weeks ahead of surgeon timeline",
-      lifestyleWin: "Resumed weekend trekking and active walking with zero swelling",
-      quote: "They rebuilt my confidence safely. I'm hiking again at 51 — something I thought was over for me.",
-    },
-  ];
-
-  const CaseStudyCard = ({ cs }: { cs: CaseStudyData }) => (
-    <div className="w-full md:w-[360px] shrink-0 rounded-2xl border border-white/10 p-3.5 sm:p-4 bg-white/5 shadow-card hover:shadow-elevated hover:border-fv-orange/40 transition-all duration-300 md:mx-2 text-left flex flex-col justify-between">
-      <div>
-        <div className="flex items-start justify-between border-b border-white/10 pb-2 mb-2 gap-2">
-          <div className="min-w-0">
-            <h3 className="font-sans font-black uppercase text-sm md:text-base text-white tracking-tight leading-tight truncate">{cs.name}</h3>
-            <span className="text-[10px] font-semibold text-white/50 block truncate mt-0.5">{cs.location}</span>
-          </div>
-          <span className="text-[9px] font-bold uppercase tracking-wider text-fv-orange bg-fv-orange/10 px-2 py-0.5 rounded-full border border-fv-orange/20 shrink-0">
-            {cs.duration}
-          </span>
-        </div>
-
-        {/* Hard Metric Pill */}
-        <div className="bg-fv-orange/15 border border-fv-orange/30 rounded-xl p-2 mb-2 text-left">
-          <span className="text-[9px] font-bold uppercase tracking-widest text-fv-orange block">Measured Metric Results</span>
-          <span className="text-xs font-black text-white mt-0.5 block leading-snug">{cs.beforeAfter}</span>
-        </div>
-
-        <div className="space-y-1.5 text-xs">
-          <div>
-            <span className="text-[9px] font-bold uppercase text-white/40 block">Problem</span>
-            <span className="text-white/80 text-[11px] leading-relaxed block">{cs.problem}</span>
-          </div>
-          <div>
-            <span className="text-[9px] font-bold uppercase text-white/40 block">Clinical / Health Win</span>
-            <span className="text-fv-orange font-semibold text-[11px] block">✓ {cs.medicalWin}</span>
-          </div>
-        </div>
-
-        <p className="mt-2.5 text-[11px] text-white/70 italic leading-relaxed pt-2 border-t border-white/10 line-clamp-3">
-          &quot;{cs.quote}&quot;
-        </p>
-      </div>
-
-      <div className="mt-2.5 pt-2 border-t border-white/10 flex items-center justify-between gap-1 text-[10px] font-semibold text-white/50">
-        <span className="truncate">Coach: <strong className="text-white">{cs.trainer}</strong></span>
-        <span className="text-fv-orange flex items-center gap-1 shrink-0">
-          <Star className="h-3 w-3 fill-fv-orange" /> Google 5.0 Verified
-        </span>
-      </div>
-    </div>
-  );
-
-  const doubled = [...caseStudies, ...caseStudies];
-
-  return (
-    <section id="testimonials" className="pt-12 pb-16 md:pt-20 md:pb-28 bg-fv-navy border-t border-white/10 overflow-hidden">
-      <div className="fluid-container-testimonials text-center">
-        <div className="flex items-center justify-center gap-2 mb-2">
-          <span className="h-px w-8 bg-fv-orange"></span>
-          <span className="text-xs font-bold uppercase tracking-widest text-fv-orange">Measured Transformations</span>
-          <span className="h-px w-8 bg-fv-orange"></span>
-        </div>
-        <h2 className="font-sans font-black uppercase fluid-heading">
-          MEMBER <span className="text-fv-orange">CASE STUDIES</span>
-        </h2>
-        <p className="mt-2.5 text-white/60 fluid-body max-w-xl mx-auto">
-          Real data, real medical progress, and verified transformations from residents in Bangalore apartment societies.
-        </p>
-      </div>
-
-      {/* Desktop Marquee Carousel */}
-      <div className="hidden md:block mt-5 relative">
-        <div className="pointer-events-none absolute inset-y-0 left-0 w-32 bg-gradient-to-r from-fv-navy to-transparent z-10" />
-        <div className="pointer-events-none absolute inset-y-0 right-0 w-32 bg-gradient-to-l from-fv-navy to-transparent z-10" />
-        <div className="marquee-track py-3">
-          {doubled.map((cs, i) => (
-            <CaseStudyCard key={`${cs.name}-${i}`} cs={cs} />
-          ))}
-        </div>
-      </div>
-
-      {/* Mobile Swipeable Carousel */}
-      <div className="md:hidden mt-5 px-4">
-        <Carousel opts={{ align: "start", loop: true }}>
-          <CarouselContent className="-ml-4">
-            {caseStudies.map((cs) => (
-              <CarouselItem key={cs.name} className="pl-4 basis-[90%]">
-                <CaseStudyCard cs={cs} />
-              </CarouselItem>
-            ))}
-          </CarouselContent>
-        </Carousel>
-        <p className="mt-2 text-center text-xs text-white/40">← swipe to see more →</p>
       </div>
     </section>
   );
