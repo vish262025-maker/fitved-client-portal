@@ -49,8 +49,8 @@ import { GeoSEOFooter } from "@/components/GeoSEOFooter";
 import { z } from "zod";
 import { cn } from "@/lib/utils";
 import fitvedLogo from "@/assets/fitved-logo.png";
-import monalisaFit from "@/assets/monalisa-fit.png";
-import monalisaDoubtful from "@/assets/monalisa-doubtful.png";
+import monalisaFit from "@/assets/monalisa-fit.webp";
+import monalisaDoubtful from "@/assets/monalisa-doubtful.webp";
 import razorpayRizeLogo from "@/assets/razorpay-rize.svg";
 const heroHands = "https://images.unsplash.com/photo-1544367567-0f2fcb009e0b?w=1920&q=80";
 
@@ -408,12 +408,12 @@ function Nav({
                 )}
               </div>
             ))}
-            {/* Online Classes — highlighted */}
+            {/* Online Training — highlighted */}
             <a
               href="/online-training"
               className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-2 text-xs font-bold uppercase tracking-wider text-fv-orange hover:text-white hover:bg-fv-orange/90 transition-colors"
             >
-              <span className="h-1.5 w-1.5 rounded-full bg-fv-orange animate-pulse" /> Online Classes
+              <span className="h-1.5 w-1.5 rounded-full bg-fv-orange animate-pulse" /> Online Training
             </a>
             <Link
               to="/trainers"
@@ -421,11 +421,17 @@ function Nav({
             >
               Trainers
             </Link>
+            <a
+              href="/personal-trainer/bangalore"
+              className="rounded-md px-2.5 py-2 text-xs font-bold uppercase tracking-wider text-white/70 hover:text-white transition-colors"
+            >
+              Bangalore
+            </a>
             <Link
               to="/corporate"
               className="rounded-md px-2.5 py-2 text-xs font-bold uppercase tracking-wider text-white/70 hover:text-white transition-colors"
             >
-              Corporate
+              Corporate Wellness
             </Link>
             <a
               href="/societies/"
@@ -496,6 +502,13 @@ function Nav({
               >
                 Trainers
               </Link>
+              <a
+                href="/personal-trainer/bangalore"
+                className="py-3 text-left text-base font-semibold uppercase tracking-wider text-white border-b border-white/5"
+                onClick={() => setMenuOpen(false)}
+              >
+                Personal Trainer Bangalore
+              </a>
               <Link
                 to="/corporate"
                 className="py-3 text-left text-base font-semibold uppercase tracking-wider text-white border-b border-white/5"
@@ -508,7 +521,7 @@ function Nav({
                 className="py-3 text-left text-base font-bold uppercase tracking-wider text-fv-orange border-b border-white/5 inline-flex items-center gap-2"
                 onClick={() => setMenuOpen(false)}
               >
-                <span className="h-1.5 w-1.5 rounded-full bg-fv-orange animate-pulse" /> Online Classes
+                <span className="h-1.5 w-1.5 rounded-full bg-fv-orange animate-pulse" /> Online Training
               </a>
               <a
                 href="/societies/"
@@ -1232,7 +1245,7 @@ function Services() {
     },
     {
       num: "08",
-      title: "Online Coaching",
+      title: "Online Training",
       audience: "For Remote & Global Clients",
       category: "professionals",
       desc: "Train from anywhere with video-guided sessions, personalized programs, and real-time trainer feedback.",

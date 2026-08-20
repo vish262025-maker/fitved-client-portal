@@ -26,4 +26,15 @@ if [ -d "$DEST/societies" ]; then
   rm -rf "$DEST/societies"
 fi
 
-echo "✓ Societies embedded. Commit public/societies/ and deploy."
+# Prune files the statically-served export doesn't need, so public/societies/
+# stays lean (no repeating content, no dead template assets):
+#   • *.txt        — Next.js RSC soft-navigation payloads. Each duplicates its
+#                    page's HTML (index.txt == __next._full.txt, etc.). Direct
+#                    page loads use index.html; internal <Link> clicks fall back
+#                    to a full-page navigation when the payload is absent.
+#   • starter SVGs — file/globe/next/vercel/window.svg are unused Next.js
+#                    template leftovers (icon.svg is the favicon — kept).
+find "$DEST" -type f -name "*.txt" -delete
+rm -f "$DEST"/file.svg "$DEST"/globe.svg "$DEST"/next.svg "$DEST"/vercel.svg "$DEST"/window.svg
+
+echo "✓ Societies embedded (pruned $(find "$DEST" -type f | wc -l | tr -d ' ') files). Commit public/societies/ and deploy."
