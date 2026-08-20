@@ -22,6 +22,7 @@ import { ProgressRing } from "@/components/ui/progress-ring";
 import { ClassCalendar } from "@/components/dashboard/ClassCalendar";
 import { MarketingFeed } from "@/components/dashboard/MarketingFeed";
 import { AddEmailCard } from "@/components/dashboard/AddEmailCard";
+import { ClassModeGate } from "@/components/dashboard/ClassModeGate";
 
 // ── Design tokens ──────────────────────────────────────────────────────────────
 const GOLD       = "#f0a720";
@@ -774,6 +775,8 @@ export default function Dashboard() {
 
   return (
     <>
+      {/* First-time class-mode selection (Online/Offline) for new clients. */}
+      <ClassModeGate />
       {/* Existing customers pre-date the email step — offer to add one.
           Rendered once above both layouts so the link-completion effect
           only ever runs a single time. Clients only. */}

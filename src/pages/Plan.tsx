@@ -154,8 +154,8 @@ export default function Plan() {
             </p>
           </Card>
           {user && (
-            <div className="max-w-md">
-              <h2 className="font-display text-xl mb-4">Choose your plan</h2>
+            <div className="max-w-[1120px]">
+              <h2 className="font-display text-2xl mb-5">Choose your plan</h2>
               <PlanOptionsList userId={user.id} customerName={customerName} customerPhone={profile?.phone ?? ""} />
             </div>
           )}

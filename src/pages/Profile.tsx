@@ -15,6 +15,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import TrainerProfile from "./TrainerProfile";
+import { ClassModeCard } from "@/components/dashboard/ClassModeCard";
 
 const GOLD       = "#f0a720";
 const GOLD_LIGHT = "#fef3d0";
@@ -240,6 +241,13 @@ export default function Profile() {
           </div>
         </div>
 
+        {/* Class mode + switch request */}
+        {role === "client" && user && (
+          <div className="mx-4 mb-4">
+            <ClassModeCard userId={user.id} profile={profile} />
+          </div>
+        )}
+
         {/* Payment history — tucked away, collapsed by default */}
         {role === "client" && user && (
           <div className="mx-4 mb-4">
@@ -356,6 +364,9 @@ export default function Profile() {
             <p className="mt-4 text-sm text-muted-foreground">No trainer assigned yet.</p>
           )}
         </Card>
+
+        {/* Class mode + switch request */}
+        {role === "client" && user && <ClassModeCard userId={user.id} profile={profile} />}
 
         {/* Payment history — tucked away, collapsed by default */}
         {role === "client" && user && <PaymentHistory userId={user.id} />}

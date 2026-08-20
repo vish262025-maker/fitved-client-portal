@@ -421,12 +421,6 @@ function Nav({
             >
               Trainers
             </Link>
-            <a
-              href="/personal-trainer/bangalore"
-              className="rounded-md px-2.5 py-2 text-xs font-bold uppercase tracking-wider text-white/70 hover:text-white transition-colors"
-            >
-              Bangalore
-            </a>
             <Link
               to="/corporate"
               className="rounded-md px-2.5 py-2 text-xs font-bold uppercase tracking-wider text-white/70 hover:text-white transition-colors"

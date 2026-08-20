@@ -29,6 +29,7 @@ import AdminReferrals from "./pages/admin/Referrals";
 import SuperAdmin from "./pages/admin/SuperAdmin";
 import AdminProfile from "./pages/admin/AdminProfile";
 import SuperAdminRequests from "./pages/admin/SuperAdminRequests";
+import ModeRequests from "./pages/admin/ModeRequests";
 import SuperAdminLogin from "./pages/SuperAdminLogin";
 import Corporate from "./pages/Corporate";
 import FaqsPage from "./pages/FaqsPage";
@@ -135,6 +136,7 @@ const App = () => (
                 <Route path="/admin/societies" element={<ProtectedRoute allow={["admin"]}><Societies /></ProtectedRoute>} />
                 <Route path="/admin/marketing" element={<ProtectedRoute allow={["admin"]}><Marketing /></ProtectedRoute>} />
                 <Route path="/admin/referrals" element={<ProtectedRoute allow={["admin"]}><AdminReferrals /></ProtectedRoute>} />
+                <Route path="/admin/mode-requests" element={<ProtectedRoute allow={["admin"]}><ModeRequests /></ProtectedRoute>} />
 
                 {/* Super Admin */}
                 <Route path="/super-admin" element={<ProtectedRoute allow={["super_admin"]}><SuperAdmin /></ProtectedRoute>} />

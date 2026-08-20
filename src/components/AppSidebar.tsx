@@ -1,5 +1,5 @@
 import { NavLink, useLocation } from "react-router-dom";
-import { LayoutDashboard, CalendarOff, CreditCard, FileHeart, UserCircle2, Users, Dumbbell, Building2, Gauge, Package, Megaphone, Gift, ShieldCheck, Inbox } from "lucide-react";
+import { LayoutDashboard, CalendarOff, CreditCard, FileHeart, UserCircle2, Users, Dumbbell, Building2, Gauge, Package, Megaphone, Gift, ShieldCheck, Inbox, ArrowLeftRight } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -47,6 +47,7 @@ export function AppSidebar() {
       { title: "Societies", url: "/admin/societies", icon: Building2 },
       { title: "Marketing", url: "/admin/marketing", icon: Megaphone },
       { title: "Referrals", url: "/admin/referrals", icon: Gift },
+      { title: "Mode Requests", url: "/admin/mode-requests", icon: ArrowLeftRight },
       { title: "Profile", url: "/profile", icon: UserCircle2 },
     ];
   } else if (role === "super_admin") {

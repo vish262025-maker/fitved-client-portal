@@ -43,9 +43,9 @@ export default function Customers() {
         supabase.from("societies").select("id, name"),
       ]);
 
+      // Customers are profiles flagged with the "client" role — trainers/admins
+      // also have profiles rows, so this gate keeps them out of the book.
       const clientIds = new Set((roles ?? []).map((r) => r.user_id));
-      // Scope to the customers assigned to this admin (impersonating SA uses the
-      // viewed admin's id, so they see exactly that admin's customer book).
       const profiles = ((allProfiles ?? []) as any[])
         .filter((p) => clientIds.has(p.id))
         .filter((p) => (adminId ? p.assigned_admin_id === adminId : true));
