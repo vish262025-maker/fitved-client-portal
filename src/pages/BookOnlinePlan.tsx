@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams, Link } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -16,7 +16,7 @@ import {
 } from "@/lib/onlineBatches";
 import { STATUS_LABEL, OPEN_STATUSES, slotSummary, type BookingRequest } from "@/lib/bookingRequests";
 import { syncPlanForOnlineBooking } from "@/lib/onlinePlanSync";
-import { gatewayConfig, payForPlan } from "@/lib/payments";
+import { gatewayConfig, payForPlan, preloadCheckout } from "@/lib/payments";
 
 const GOLD = "#f0a720";
 const NAVY = "#1E3A5F";
@@ -45,6 +45,9 @@ export default function BookOnlinePlan() {
   const [attemptRef] = useState(() => Date.now().toString(36));
 
   const adminId: string | null = (profile as any)?.assigned_admin_id ?? null;
+  // Warm the gateway script while they choose, so Pay opens at once.
+  useEffect(() => { preloadCheckout(); }, []);
+
   const gatewayQ = useQuery({ queryKey: ["gateway-config"], queryFn: gatewayConfig });
 
   const planQ = useQuery({
@@ -462,7 +465,9 @@ export default function BookOnlinePlan() {
           )}
 
           <Button onClick={payAndCreate} disabled={paying} className="mt-5 w-full gap-2 sm:ml-auto sm:w-auto sm:px-6">
-            {paying ? <><Loader2 className="h-4 w-4 animate-spin" /> Processing…</> : <>Proceed to payment <ArrowRight className="h-4 w-4" /></>}
+            {paying
+              ? <><Loader2 className="h-4 w-4 animate-spin" /> Processing…</>
+              : <>{gatewayQ.data?.enabled === false ? "Confirm booking" : `Pay ₹${Number(plan?.price ?? 0).toLocaleString("en-IN")}`} <ArrowRight className="h-4 w-4" /></>}
           </Button>
         </div>
       )}

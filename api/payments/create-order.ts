@@ -30,7 +30,10 @@ export default async function handler(req: any, res: any) {
 
   const { data: plan, error } = await (sb as any)
     .from("plans")
-    .select("id, user_id, plan_option_id, payment_status, razorpay_order_id, total_sessions")
+    // training_mode/type are read by the category guard below — without them
+    // it compared undefined against the running plan, defaulted both sides to
+    // "offline group", and let every mismatch through.
+    .select("id, user_id, plan_option_id, payment_status, razorpay_order_id, total_sessions, training_mode, training_type")
     .eq("id", planId)
     .maybeSingle();
 
@@ -40,6 +43,37 @@ export default async function handler(req: any, res: any) {
     return json(res, 409, { error: "already_paid" });
   }
   if (!plan.plan_option_id) return json(res, 409, { error: "plan_has_no_price" });
+
+  /**
+   * A running subscription fixes the category they may buy into.
+   *
+   * The browser now hides the other categories, but the browser is not the
+   * authority — a customer on an offline group plan must not be able to pay
+   * for online personal and strand the classes they are still owed.
+   */
+  {
+    const { data: current } = await (sb as any)
+      .from("plans")
+      .select("training_mode, training_type, end_date")
+      .eq("user_id", plan.user_id)
+      .eq("status", "active")
+      .or("payment_status.is.null,payment_status.eq.success")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (current) {
+      const same = (a: any, b: any) =>
+        ((a.training_mode ?? "offline") === (b.training_mode ?? "offline")) &&
+        ((a.training_type ?? "group") === (b.training_type ?? "group"));
+      if (!same(current, plan)) {
+        return json(res, 409, {
+          error: "category_locked",
+          message: `You're on a ${current.training_mode} ${current.training_type} plan until ${current.end_date}.`,
+        });
+      }
+    }
+  }
 
   const { data: option } = await (sb as any)
     .from("plan_options")

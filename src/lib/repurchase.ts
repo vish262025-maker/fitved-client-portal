@@ -163,39 +163,54 @@ export async function repurchase(
 
   const today = args.today ?? new Date().toISOString().slice(0, 10);
   const row = repurchaseRow({ userId, option, assignment: assignment!, today });
+  const planId = await startCheckout(sb, { userId, planOptionId: option.id, row });
+  return await payForPlan(planId);
+}
 
-  // Closing the gateway and pressing Renew again must not leave a trail of
-  // abandoned plans behind. An unpaid checkout for this same plan is that
-  // same attempt, so reuse it — one pending row per plan, however many times
-  // they change their mind. A paid plan is never touched here.
-  const { data: open } = await sb
-    .from("plans")
-    .select("id")
-    .eq("user_id", userId)
-    .eq("plan_option_id", option.id)
-    .eq("payment_status", "pending")
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
 
-  if (open?.id) {
-    const { error: upErr } = await sb
+/**
+ * Open (or re-open) an unpaid checkout and return its plan id.
+ *
+ * Closing the payment window and trying again must not leave a trail of
+ * abandoned plans behind: an unpaid row for the same plan IS that same
+ * attempt. Every purchase path shares this so one customer accumulates one
+ * pending row per plan, however many times they change their mind — instead
+ * of the dozen that piled up before, each of which then had to be filtered
+ * back out of calendars, rosters and admin lists.
+ *
+ * A plan that has been paid for is never touched.
+ */
+export async function startCheckout(
+  sb: { from: (t: string) => any },
+  args: { userId: string; planOptionId: string | null; row: Record<string, unknown> },
+): Promise<string> {
+  const { userId, planOptionId, row } = args;
+
+  if (planOptionId) {
+    const { data: open } = await sb
       .from("plans")
-      .update({ ...row, updated_at: new Date().toISOString() })
-      .eq("id", open.id)
-      .neq("payment_status", "success");
-    if (upErr) throw new Error(upErr.message);
-    return await payForPlan(open.id);
+      .select("id")
+      .eq("user_id", userId)
+      .eq("plan_option_id", planOptionId)
+      .eq("payment_status", "pending")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (open?.id) {
+      const { error } = await sb
+        .from("plans")
+        .update({ ...row, updated_at: new Date().toISOString() })
+        .eq("id", open.id)
+        .neq("payment_status", "success");
+      if (error) throw new Error(error.message);
+      return open.id as string;
+    }
   }
 
   const { data: created, error } = await sb
-    .from("plans")
-    .insert(row)
-    .select("id")
-    .maybeSingle();
-
+    .from("plans").insert(row).select("id").maybeSingle();
   if (error) throw new Error(error.message);
-  if (!created?.id) throw new Error("Couldn't start your renewal. Please try again.");
-
-  return await payForPlan(created.id);
+  if (!created?.id) throw new Error("Couldn't start your purchase. Please try again.");
+  return created.id as string;
 }

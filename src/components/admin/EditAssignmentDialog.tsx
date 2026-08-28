@@ -35,6 +35,10 @@ export function EditAssignmentDialog({ request, adminId, open, onOpenChange }: P
   const isOnline = request?.training_mode === "online";
   // Money taken by Razorpay, verified server-side — not something an admin
   // toggles here.
+  /** Money has been taken for this subscription. */
+  const purchased = (request as any)?.payment_status === "success"
+    || (request as any)?.payment_status === "paid"
+    || String((request as any)?.id ?? "").startsWith("plan:");
   const gatewayPaid = (request as any)?.payment_status === "success"
     || (request as any)?.payment_status === "paid";
   const isPersonal = request?.training_type === "personal";
@@ -254,7 +258,8 @@ export function EditAssignmentDialog({ request, adminId, open, onOpenChange }: P
           .update({
             batch_id: isOnline ? (batchId || null) : null,
             trainer_id: trainerId || null,
-            plan_option_id: planId || null,
+            // Not plan_option_id: see the Plan field — a purchase is not
+            // re-pointed at a different product after the money is taken.
             training_days: days.length ? days : null,
             status: planStatus,
             updated_at: new Date().toISOString(),
@@ -270,7 +275,7 @@ export function EditAssignmentDialog({ request, adminId, open, onOpenChange }: P
       }
 
       const patch: Record<string, unknown> = {
-        plan_option_id: planId || null,
+        ...(purchased ? {} : { plan_option_id: planId || null }),
         status,
         trainer_id: trainerId || null,
         preferred_time: shownTime || null,
@@ -386,17 +391,40 @@ export function EditAssignmentDialog({ request, adminId, open, onOpenChange }: P
           <div className="space-y-4">
             <div className="space-y-1.5">
               <Label>Plan</Label>
-              <Select value={planId} onValueChange={setPlanId}>
-                <SelectTrigger><SelectValue placeholder="Select a plan" /></SelectTrigger>
-                <SelectContent>
-                  {plans.map((p: any) => (
-                    <SelectItem key={p.id} value={p.id}>
-                      {p.name} · ₹{Number(p.price).toLocaleString("en-IN")}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <p className="text-[11px] text-muted-foreground">Only {isOnline ? "online" : "offline"} {isPersonal ? "personal" : "group"} plans are listed.</p>
+              {/*
+                What they bought is a fact of the purchase, not a setting.
+                Changing it here would rewrite the plan behind a payment that
+                has already been taken — a different price, a different session
+                count and a different term against money that was collected for
+                something else. It is shown, not offered.
+                Still selectable on an unpaid booking, where nothing has been
+                charged and the plan has yet to be decided.
+              */}
+              {purchased ? (
+                <>
+                  <div className="flex h-10 items-center rounded-md border border-border bg-muted/40 px-3 text-sm">
+                    {plans.find((p: any) => p.id === planId)?.name ?? "—"}
+                    {sub ? ` · ₹${Math.max(0, Number(sub.amount ?? 0) - Number(sub.discount ?? 0)).toLocaleString("en-IN")}` : ""}
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">
+                    Already purchased — change it by selling them a new plan, not by editing this one.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <Select value={planId} onValueChange={setPlanId}>
+                    <SelectTrigger><SelectValue placeholder="Select a plan" /></SelectTrigger>
+                    <SelectContent>
+                      {plans.map((p: any) => (
+                        <SelectItem key={p.id} value={p.id}>
+                          {p.name} · ₹{Number(p.price).toLocaleString("en-IN")}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-[11px] text-muted-foreground">Only {isOnline ? "online" : "offline"} {isPersonal ? "personal" : "group"} plans are listed.</p>
+                </>
+              )}
             </div>
 
             {/* Offline-only location fields */}

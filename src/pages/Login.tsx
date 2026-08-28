@@ -19,6 +19,7 @@ import { FitvedLogo } from "@/components/FitvedLogo";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { isValidPhone, isValidDob, normalizePhone, isValidEmail } from "@/lib/phoneAuth";
+import { BirthdayPicker } from "@/components/ui/birthday-picker";
 
 // Wizard state survives the round-trip through the emailed verification link
 const PENDING_SIGNUP_KEY = "fitved_pending_signup";
@@ -67,7 +68,6 @@ export default function Login() {
   const [custPhone, setCustPhone] = useState("");
   const [custEmail, setCustEmail] = useState("");
   const [custDob, setCustDob] = useState<Date | undefined>(undefined);
-  const [dobOpen, setDobOpen] = useState(false);
 
   // Staff state — first-time email sign-in auto-creates the password, and
   // Google users set one from inside the dashboard, so no "setup" mode here.
@@ -349,32 +349,7 @@ export default function Login() {
   const dobField = (
     <div className="space-y-2">
       <Label>Date of birth <span className="text-destructive">*</span></Label>
-      <Popover open={dobOpen} onOpenChange={setDobOpen}>
-        <PopoverTrigger asChild>
-          <Button
-            type="button"
-            variant="outline"
-            className={cn("w-full justify-start text-left font-normal", !custDob && "text-muted-foreground")}
-          >
-            <CalendarIcon className="mr-2 h-4 w-4" />
-            {custDob ? format(custDob, "PPP") : <span>Pick your birthday</span>}
-          </Button>
-        </PopoverTrigger>
-        <PopoverContent className="w-auto p-0" align="start">
-          <Calendar
-            mode="single"
-            selected={custDob}
-            onSelect={(d) => { setCustDob(d); setDobOpen(false); }}
-            captionLayout="dropdown"
-            fromYear={1925}
-            toYear={new Date().getFullYear()}
-            defaultMonth={custDob ?? new Date(1990, 0, 1)}
-            disabled={(d) => d > new Date() || d < new Date("1925-01-01")}
-            initialFocus
-            className={cn("p-3 pointer-events-auto")}
-          />
-        </PopoverContent>
-      </Popover>
+      <BirthdayPicker value={custDob} onChange={setCustDob} />
       <p className="text-xs text-muted-foreground">Your birthday is your password — keep it private.</p>
     </div>
   );

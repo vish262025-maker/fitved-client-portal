@@ -39,7 +39,7 @@ interface Props {
   sessions?: { session_date: string; status: string; attended: boolean | null }[];
 }
 
-type DayState = "attended" | "upcoming" | "paused" | "off" | "missed" | "rest" | "outside";
+type DayState = "attended" | "upcoming" | "paused" | "off" | "rest" | "outside";
 
 function todayLocalISO() {
   const d = new Date();
@@ -83,12 +83,22 @@ export function ClassCalendar({ startDate, endDate, trainingDays, pauses, offTim
     if (sessions?.length) {
       const rec = byDate[date];
       if (rec) {
-        if (rec.attended === true || rec.status === "completed") return "attended";
-        if (rec.status === "paused") return "paused";
+        // In FitVed a class the customer did not attend is a pause class —
+        // there is no separate "absent" state, so these are the same thing.
+        if (rec.attended === false || rec.status === "missed" || rec.status === "paused")
+          return "paused";
         if (rec.status === "trainer_off") return "off";
-        if (rec.status === "missed") return "missed";
         if (rec.status === "cancelled") return "rest";
-        return date < today ? "missed" : "upcoming";
+        if (rec.attended === true || rec.status === "completed") return "attended";
+        /**
+         * A past class that is still 'scheduled'.
+         *
+         * In FitVed a class happens unless a pause or a trainer's day off says
+         * otherwise — that is the same rule expire_subscriptions() applies when
+         * it ages these rows. So it ran: show the tick. Anything else is the
+         * database's bookkeeping leaking onto the customer's calendar.
+         */
+        return date < today ? "attended" : "upcoming";
       }
       if (date < startDate || date > endDate) return "outside";
       return "rest";

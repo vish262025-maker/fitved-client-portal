@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { subscriptionTerm, tomorrowISO, planStartDate } from "@/lib/term";
+import { subscriptionTerm, tomorrowISO, planStartDate, termStart } from "@/lib/term";
 import { subscriptionTerm as serverTerm } from "../../api/_lib/term";
 
 describe("subscriptionTerm", () => {
@@ -78,5 +78,40 @@ describe("planStartDate", () => {
   it("rolls across a month end", () => {
     // 2026-08-31 is a Monday; tomorrow is Tuesday.
     expect(planStartDate(["Tuesday"], "2026-08-31")).toBe("2026-09-02");
+  });
+});
+
+describe("termStart — buying while a plan is running adds time", () => {
+  it("starts the day after the current plan ends", () => {
+    // Ritu's case: plan runs to 12 Sep, she renews on 28 Aug.
+    expect(termStart("2026-08-28", "2026-09-12")).toBe("2026-09-13");
+  });
+
+  it("starts on the purchase date when nothing is running", () => {
+    expect(termStart("2026-08-28", null)).toBe("2026-08-28");
+    expect(termStart("2026-08-28", undefined)).toBe("2026-08-28");
+  });
+
+  it("starts on the purchase date when the old plan already ended", () => {
+    expect(termStart("2026-08-28", "2026-07-31")).toBe("2026-08-28");
+  });
+
+  it("handles a plan ending today — the new one starts tomorrow", () => {
+    expect(termStart("2026-08-28", "2026-08-28")).toBe("2026-08-29");
+  });
+
+  it("rolls across month and year ends", () => {
+    expect(termStart("2026-08-28", "2026-08-31")).toBe("2026-09-01");
+    expect(termStart("2026-08-28", "2026-12-31")).toBe("2027-01-01");
+  });
+
+  it("keeps the full term: a 3-month plan bought mid-plan runs 3 months from the handover", () => {
+    const start = termStart("2026-08-28", "2026-09-12");
+    expect(subscriptionTerm(start, 3).end).toBe("2026-12-12");
+  });
+
+  it("agrees with the server's copy of the rule", async () => {
+    const server = await import("../../api/_lib/term");
+    expect(server.termStart("2026-08-28", "2026-09-12")).toBe(termStart("2026-08-28", "2026-09-12"));
   });
 });

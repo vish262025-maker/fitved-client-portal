@@ -40,6 +40,21 @@ export function ClassModeCard({ userId, profile }: { userId: string; profile: an
     },
   });
 
+  // The plan they are currently on — a running one pins the mode.
+  const { data: activePlan } = useQuery({
+    queryKey: ["mode-lock-plan", userId],
+    enabled: !!userId,
+    queryFn: async () => {
+      const { data } = await (supabase as any)
+        .from("plans").select("end_date, status, payment_status")
+        .eq("user_id", userId).eq("status", "active")
+        .order("created_at", { ascending: false });
+      return ((data ?? []) as any[]).find(
+        (p) => p.payment_status == null || p.payment_status === "success",
+      ) ?? null;
+    },
+  });
+
   // Assigned admin contact, so the customer can reach out directly.
   const { data: admin } = useQuery({
     queryKey: ["assigned-admin-contact", profile?.assigned_admin_id],
@@ -56,12 +71,26 @@ export function ClassModeCard({ userId, profile }: { userId: string; profile: an
 
   if (columnMissing) return null; // migration not run yet
 
+  /**
+   * A running plan pins the mode.
+   *
+   * Switching online↔offline mid-term would leave the plan they paid for with
+   * no trainer, no society and no schedule that makes sense — an offline plan
+   * cannot be delivered over a video call, and vice versa. The request goes in
+   * once the current plan ends.
+   */
+  const lockedByPlan = !!activePlan;
+
   const target = mode ? otherMode(mode) : "online";
   const adminName = admin?.name || "your FitVed admin";
   const adminPhone = admin?.phone || SUPPORT_PHONE;
 
   const submit = async () => {
     if (!userId) return;
+    if (lockedByPlan) {
+      toast.error(`Your ${mode} plan runs to ${activePlan?.end_date}. You can switch once it ends.`);
+      return;
+    }
     setBusy(true);
     const { error } = await (supabase as any).from("mode_switch_requests").insert({
       user_id: userId,
@@ -95,7 +124,10 @@ export function ClassModeCard({ userId, profile }: { userId: string; profile: an
           </div>
         </div>
         {mode && !pending && (
-          <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setOpen(true)}>
+          <Button variant="outline" size="sm" className="gap-1.5"
+            disabled={lockedByPlan}
+            title={lockedByPlan ? `Your ${mode} plan runs to ${activePlan?.end_date}` : undefined}
+            onClick={() => setOpen(true)}>
             <ArrowLeftRight className="h-3.5 w-3.5" /> Request to switch
           </Button>
         )}

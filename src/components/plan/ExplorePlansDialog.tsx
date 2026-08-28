@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -7,6 +7,9 @@ import { Sparkles, Check, X, ArrowRight } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { visiblePlanOptions } from "@/lib/serviceMode";
 import { latestAssignment, canSkipBooking, repurchase } from "@/lib/repurchase";
+import { preloadCheckout } from "@/lib/payments";
+import { supportWhatsAppUrl, SUPPORT_WHATSAPP_DISPLAY } from "@/lib/support";
+import { formatDate } from "@/lib/dates";
 
 const GOLD   = "#f0a720";
 const NAVY   = "#1E3A5F";
@@ -42,6 +45,9 @@ interface Option {
 export function PlanOptionsList({ userId, customerName, customerPhone }: Props) {
   const [type, setType] = useState<TrainingType>("group");
   const navigate = useNavigate();
+
+  // Warm the gateway script while they choose, so pressing Pay opens it at once.
+  useEffect(() => { preloadCheckout(); }, []);
   const qc = useQueryClient();
   const [buying, setBuying] = useState<string | null>(null);
 
@@ -56,13 +62,37 @@ export function PlanOptionsList({ userId, customerName, customerPhone }: Props) 
     queryFn: async () => {
       const { data } = await (supabase as any)
         .from("plans")
-        .select("training_mode, training_type, society_id, day_set_id, training_days, time_slot, trainer_id, booking_request_id, payment_status, created_at")
+        .select("training_mode, training_type, society_id, day_set_id, training_days, time_slot, trainer_id, booking_request_id, payment_status, status, end_date, created_at")
         .eq("user_id", userId)
         .order("created_at", { ascending: false });
       return data ?? [];
     },
   });
   const assignment = latestAssignment(myPlans as any);
+
+  /**
+   * The plan they are currently on, if any.
+   *
+   * A running subscription fixes what they can buy next. Switching category
+   * mid-term — offline group to online personal, say — would strand the plan
+   * they already paid for: a different trainer, a different schedule, and no
+   * way to honour the classes still owed on the old one. Renewing or upgrading
+   * within the same category is fine, and simply adds to their time.
+   */
+  const activePlan = (myPlans as any[]).find(
+    (p) => (p.payment_status == null || p.payment_status === "success") && p.status === "active",
+  ) ?? null;
+  const activeMode2: ClassMode | null = activePlan
+    ? ((activePlan.training_mode ?? "offline") === "online" ? "online" : "offline") : null;
+  const activeType: TrainingType | null = activePlan
+    ? (activePlan.training_type === "personal" ? "personal" : "group") : null;
+
+  /** Same category as what they are already on — the only thing buyable now. */
+  const buyable = (o: Option) => {
+    if (!activePlan) return true;
+    return (o.class_mode ?? "offline") === activeMode2
+        && (o.training_type ?? "group") === activeType;
+  };
 
   const bookingRouteFor = (o: Option) =>
     (o.class_mode ?? "offline") === "online"
@@ -71,6 +101,13 @@ export function PlanOptionsList({ userId, customerName, customerPhone }: Props) 
 
   const proceed = async (o: Option) => {
     if (buying) return;
+    if (!buyable(o)) {
+      toast.error(
+        `You're on a ${activeMode2} ${activeType} plan until ${activePlan.end_date}. ` +
+        "Switching category mid-plan isn't possible — finish this one, or ask your admin.",
+      );
+      return;
+    }
     if (!canSkipBooking(assignment, o as any)) { navigate(bookingRouteFor(o)); return; }
     setBuying(o.id);
     try {
@@ -268,6 +305,41 @@ export function PlanOptionsList({ userId, customerName, customerPhone }: Props) 
     </div>
   );
 
+  /**
+   * Another category, while a plan is running.
+   *
+   * Showing the prices at all invites a purchase that cannot go through — the
+   * plan they are paying for would be stranded on a different trainer and
+   * schedule. So the catalogue is replaced by the one thing that IS useful
+   * here: a way to ask us about it.
+   */
+  if (activePlan && activeType && type !== activeType) {
+    const label = type === "personal" ? "personal training" : "group training";
+    return (
+      <div className="flex flex-col gap-4">
+        {Toggle}
+        <div className="rounded-[20px] p-6 text-center"
+          style={{ background: "#fff", border: `1px solid ${BORDER}` }}>
+          <p className="font-display" style={{ fontSize: 18, color: NAVY }}>
+            You're on a {activeType} plan
+          </p>
+          <p style={{ fontSize: 13.5, color: MUTED, marginTop: 4 }}>
+            Runs to {formatDate(activePlan.end_date)}
+          </p>
+          <a
+            href={supportWhatsAppUrl(`Hi FitVed, I'd like to ask about ${label}.`)}
+            target="_blank" rel="noopener noreferrer"
+            className="mt-4 flex items-center justify-center gap-2 rounded-xl font-semibold"
+            style={{ background: NAVY, color: "#fff", fontSize: 15, padding: "13px 0", textDecoration: "none" }}
+          >
+            Ask about {label}
+          </a>
+          <p style={{ fontSize: 12, color: MUTED, marginTop: 8 }}>{SUPPORT_WHATSAPP_DISPLAY}</p>
+        </div>
+      </div>
+    );
+  }
+
   // Waiting on the mode is not the same as having nothing to show — say so,
   // and hold the grid's shape so the page doesn't jump when the cards land.
   if (!modeKnown) {
@@ -374,11 +446,17 @@ export function PlanOptionsList({ userId, customerName, customerPhone }: Props) 
               <button
                 type="button"
                 onClick={() => proceed(o)}
-                disabled={buying === o.id}
+                disabled={buying === o.id || !buyable(o)}
+                title={buyable(o) ? undefined
+                  : `You're on a ${activeMode2} ${activeType} plan until ${activePlan?.end_date}`}
                 className="flex items-center justify-center gap-2 rounded-xl font-semibold w-full"
-                style={{ background: NAVY, color: "#fff", fontSize: 15, padding: "13px 0", textDecoration: "none", opacity: buying === o.id ? 0.7 : 1 }}
+                style={{ background: NAVY, color: "#fff", fontSize: 15, padding: "13px 0", textDecoration: "none",
+                  opacity: buying === o.id || !buyable(o) ? 0.45 : 1,
+                  cursor: buyable(o) ? "pointer" : "not-allowed" }}
               >
-                {buying === o.id ? "Opening payment…" : <>Proceed <ArrowRight size={18} color="#fff" /></>}
+                {buying === o.id ? "Opening payment…"
+                  : !buyable(o) ? "Not available on your current plan"
+                  : <>Proceed <ArrowRight size={18} color="#fff" /></>}
               </button>
             </div>
           );

@@ -16,6 +16,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { isValidPhone, isValidDob, normalizePhone } from "@/lib/phoneAuth";
 import { useAuth } from "@/contexts/AuthContext";
+import { BirthdayPicker } from "@/components/ui/birthday-picker";
 
 interface Props {
   open: boolean;
@@ -146,32 +147,7 @@ export function AddCustomerDialog({ open, onOpenChange, onCreated }: Props) {
           </div>
           <div className="space-y-1.5">
             <Label>Date of birth * (used as password)</Label>
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className={cn("w-full justify-start text-left font-normal", !dob && "text-muted-foreground")}
-                >
-                  <CalendarIcon className="mr-2 h-4 w-4" />
-                  {dob ? format(dob, "PPP") : <span>Pick a date</span>}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0" align="start">
-                <Calendar
-                  mode="single"
-                  selected={dob}
-                  onSelect={setDob}
-                  captionLayout="dropdown"
-                  fromYear={1925}
-                  toYear={new Date().getFullYear()}
-                  defaultMonth={dob ?? new Date(1980, 0, 1)}
-                  disabled={(d) => d > new Date() || d < new Date("1925-01-01")}
-                  initialFocus
-                  className={cn("p-3 pointer-events-auto")}
-                />
-              </PopoverContent>
-            </Popover>
+            <BirthdayPicker value={dob} onChange={setDob} placeholder="Pick a date" />
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div className="space-y-1.5">

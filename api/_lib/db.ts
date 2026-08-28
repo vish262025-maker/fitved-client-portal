@@ -1,6 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { SUPABASE_URL, SERVICE_ROLE_KEY } from "./env.js";
-import { subscriptionTerm } from "./term.js";
+import { subscriptionTerm, termStart } from "./term.js";
 
 /**
  * Service-role client. This is the only identity allowed to mark a
@@ -95,8 +95,30 @@ export async function activateFromOrder(
     // way — only the DATES wait for the trainer.
     if (months > 0) patch.duration_months = months;
 
+    /**
+     * Buying while a plan is still running ADDS time, it does not restart it.
+     *
+     * Dating the new term from today would silently discard whatever was left
+     * on the plan they are already paying for. So the new term begins the day
+     * after the current one ends, and the customer keeps every day they bought.
+     */
+    let effectiveStart = start;
     if (months > 0 && !startsOnAssignment) {
-      const term = subscriptionTerm(start, months);
+      const { data: running } = await (sb as any)
+        .from("plans")
+        .select("end_date")
+        .eq("user_id", plan.user_id)
+        .eq("status", "active")
+        .neq("id", plan.id)
+        .or("payment_status.is.null,payment_status.eq.success")
+        .order("end_date", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      effectiveStart = termStart(start, running?.end_date);
+    }
+
+    if (months > 0 && !startsOnAssignment) {
+      const term = subscriptionTerm(effectiveStart, months);
       patch.start_date = term.start;
       patch.end_date = term.end;
       patch.original_end_date = term.end;

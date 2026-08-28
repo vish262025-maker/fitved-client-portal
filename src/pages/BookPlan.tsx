@@ -8,7 +8,8 @@ import { Button } from "@/components/ui/button";
 import { ArrowLeft, ArrowRight, Building2, Check, Clock, MapPin, Loader2, CalendarDays } from "lucide-react";
 import { sortDays, daySetLabel, validateDaySet, deriveDaySetsFromPlans, type DaySet } from "@/lib/daySets";
 import { toast } from "sonner";
-import { gatewayConfig, payForPlan } from "@/lib/payments";
+import { gatewayConfig, payForPlan, preloadCheckout } from "@/lib/payments";
+import { startCheckout } from "@/lib/repurchase";
 
 const GOLD = "#f0a720";
 const NAVY = "#1E3A5F";
@@ -38,6 +39,9 @@ export default function BookPlan() {
   const [slot, setSlot] = useState("");
   const [paying, setPaying] = useState(false);
   const qc = useQueryClient();
+  // Warm the gateway script while they choose, so Pay opens at once.
+  useEffect(() => { preloadCheckout(); }, []);
+
   const gatewayQ = useQuery({ queryKey: ["gateway-config"], queryFn: gatewayConfig });
 
   const adminId: string | null = (profile as any)?.assigned_admin_id ?? null;
@@ -159,9 +163,10 @@ export default function BookPlan() {
     setPaying(true);
     try {
       const today = new Date().toISOString().slice(0, 10);
-      const { data: created, error } = await (supabase as any)
-        .from("plans")
-        .insert({
+      const newPlanId = await startCheckout(supabase as any, {
+        userId: user.id,
+        planOptionId: plan.id,
+        row: {
           user_id: user.id,
           plan_option_id: plan.id,
           training_mode: "offline",
@@ -183,12 +188,9 @@ export default function BookPlan() {
           // pause classes.
           status: "stopped",
           payment_status: "pending",
-        })
-        .select("id").maybeSingle();
-      if (error) throw error;
-      if (!created?.id) throw new Error("Couldn't start your subscription. Please try again.");
-
-      const paid = await payForPlan(created.id);
+        },
+      });
+      const paid = await payForPlan(newPlanId);
       if (paid.status === "success") {
         toast.success("Payment received — your plan is active.");
         await Promise.all([

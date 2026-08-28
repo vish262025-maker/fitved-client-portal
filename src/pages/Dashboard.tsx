@@ -30,6 +30,7 @@ import { OnlineSessionCard } from "@/components/dashboard/OnlineSessionCard";
 import { useIsOnlineCustomer } from "@/hooks/useIsOnlineCustomer";
 import { deriveSubscriptionStatus, isPaid } from "@/lib/subscription";
 import { useSessions } from "@/hooks/useSessions";
+import { useCurrentPlan } from "@/hooks/useCurrentPlan";
 
 // ── Design tokens ──────────────────────────────────────────────────────────────
 const GOLD       = "#f0a720";
@@ -81,28 +82,7 @@ export default function Dashboard() {
   const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
 
   // ── Data queries (unchanged from original) ──────────────────────────────────
-  /**
-   * "Your plan" means the plan they bought.
-   *
-   * This took the newest row of any kind, so abandoning a checkout replaced a
-   * real, completed subscription with the unpaid shell of one — the dashboard
-   * then said "this plan was never activated" to a customer who had in fact
-   * paid, trained, and finished a plan. A never-paid row is only the answer
-   * when there is no purchase to show at all.
-   */
-  const { data: plan } = useQuery({
-    queryKey: ["plan", user?.id],
-    enabled: !!user,
-    queryFn: async () => {
-      const { data } = await supabase
-        .from("plans").select("*").eq("user_id", user!.id)
-        .order("created_at", { ascending: false });
-      const rows = data ?? [];
-      // NULL payment_status = collected outside the app, which counts as paid.
-      const paid = rows.find((p: any) => p.payment_status == null || p.payment_status === "success");
-      return paid ?? rows[0] ?? null;
-    },
-  });
+  const { data: plan } = useCurrentPlan(user?.id);
 
   // Real session records for this customer — the calendar prefers these over
   // deriving days from the plan's date range.

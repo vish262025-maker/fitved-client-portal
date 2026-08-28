@@ -81,7 +81,21 @@ interface OrderResponse {
  * confirmed the payment. A "cancelled" result leaves the plan unpaid and
  * re-bookable; nothing is activated on this side.
  */
+/**
+ * Fetch Razorpay's checkout script ahead of time.
+ *
+ * It is ~100KB from a third-party CDN and was only requested after the button
+ * was pressed, so the customer waited on a cold network round trip while
+ * looking at a button that appeared to do nothing. Warming it while they read
+ * the plan costs nothing and makes the gateway open immediately.
+ */
+export function preloadCheckout(): void {
+  void loadCheckout();
+}
+
 export async function payForPlan(planId: string): Promise<PayResult> {
+  // Start the script and the order together rather than in sequence.
+  const scriptReady = loadCheckout();
   const orderRes = await fetch("/api/payments/create-order", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -97,7 +111,7 @@ export async function payForPlan(planId: string): Promise<PayResult> {
     return { status: "failed", message: describe(order?.error) };
   }
 
-  if (!(await loadCheckout())) {
+  if (!(await scriptReady)) {
     return { status: "failed", message: "Couldn't load the payment window. Check your connection." };
   }
 
@@ -152,6 +166,7 @@ function describe(code: unknown): string {
   switch (code) {
     case "plan_has_no_price": return "This plan has no price set. Please contact support.";
     case "plan_not_found":    return "We couldn't find your plan. Please try booking again.";
+    case "category_locked":   return "You already have a plan running in another category. Finish it, or ask your admin to switch you.";
     default:                  return "Couldn't start the payment. Please try again.";
   }
 }

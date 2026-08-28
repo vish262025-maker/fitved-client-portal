@@ -15,6 +15,7 @@ import { calculatePlanEndDate, calculatePlanRenewalDate, extendEndDateBySessions
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { deriveSubscriptionStatus, isPaid } from "@/lib/subscription";
+import { useCurrentPlan } from "@/hooks/useCurrentPlan";
 
 const GOLD       = "#f0a720";
 const NAVY       = "#1E3A5F";
@@ -34,16 +35,7 @@ export default function Plan() {
   const { history, activePause } = usePauseStore();
   const customerName = profile?.name ?? "";
 
-  const { data: plan, refetch } = useQuery({
-    queryKey: ["plan", user?.id],
-    enabled: !!user,
-    queryFn: async () => {
-      const { data } = await supabase
-        .from("plans").select("*").eq("user_id", user!.id)
-        .order("created_at", { ascending: false }).limit(1).maybeSingle();
-      return data;
-    },
-  });
+  const { data: plan, refetch } = useCurrentPlan(user?.id);
 
   // Trainer off-days — they earn the customer uncapped bonus classes.
   const { data: offTimes = [] } = useQuery({
@@ -52,7 +44,9 @@ export default function Plan() {
     queryFn: async () => {
       const { data } = await supabase
         .from("trainer_off_times")
-        .select("from_date,to_date,time_slot")
+        // Same columns as every other consumer of ["trainer-off-times"] —
+        // a shared key must mean a shared result.
+        .select("from_date,to_date,time_slot,reason")
         .eq("trainer_id", profile!.trainer_id!);
       return data ?? [];
     },
