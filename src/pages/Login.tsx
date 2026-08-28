@@ -143,8 +143,14 @@ export default function Login() {
         setCustMode("signin");
         return;
       }
-      const { error } = await sendVerificationEmail(custEmail);
+      const dobISO = `${custDob!.getFullYear()}-${String(custDob!.getMonth() + 1).padStart(2, "0")}-${String(custDob!.getDate()).padStart(2, "0")}`;
+      const { error } = await sendVerificationEmail(custEmail, "/signup", {
+        name: custName.trim(), phone: normalizePhone(custPhone), dob: dobISO,
+      });
       if (error) { toast.error(error); return; }
+      // Still stored so a refresh mid-flow doesn't lose the form, but the code
+      // is typed into THIS tab so nothing depends on which browser opens the
+      // email any more.
       localStorage.setItem(PENDING_SIGNUP_KEY, JSON.stringify({
         name: custName.trim(),
         phone: normalizePhone(custPhone),
@@ -159,7 +165,13 @@ export default function Login() {
   const handleResendLink = async () => {
     setBusy(true);
     try {
-      const { error } = await sendVerificationEmail(custEmail);
+      const dobISO = custDob
+        ? `${custDob.getFullYear()}-${String(custDob.getMonth() + 1).padStart(2, "0")}-${String(custDob.getDate()).padStart(2, "0")}`
+        : undefined;
+      const { error } = await sendVerificationEmail(
+        custEmail, "/signup",
+        dobISO ? { name: custName.trim(), phone: normalizePhone(custPhone), dob: dobISO } : undefined,
+      );
       if (error) toast.error(error);
       else toast.success("New link sent — check your inbox");
     } finally { setBusy(false); }
@@ -184,18 +196,46 @@ export default function Login() {
       }
       return;
     }
-    if (!pending?.email) {
-      toast.error("Please open the verification link on the same device and browser you signed up on.");
-      return;
-    }
     (async () => {
       setBusy(true);
+
+      // The link carries a one-time token; the details live server-side, so
+      // this works in whatever browser the mail app decided to open. Falls
+      // back to this browser's localStorage for links sent before that.
+      let details = pending;
+      const token = new URLSearchParams(window.location.search).get("t")
+        ?? (() => {
+          // Firebase nests our continue URL inside `continueUrl`.
+          const c = new URLSearchParams(window.location.search).get("continueUrl");
+          try { return c ? new URL(c).searchParams.get("t") : null; } catch { return null; }
+        })();
+
+      if (token) {
+        const { data, error: tokErr } = await (supabase as any)
+          .rpc("consume_pending_signup", { _token: token });
+        const row = Array.isArray(data) ? data[0] : data;
+        if (!tokErr && row?.email) {
+          details = { name: row.name, phone: row.phone, email: row.email, dob: row.dob };
+        }
+      }
+
+      if (!details?.email) {
+        toast.error(
+          "That link has already been used, or it expired. Please sign up again and we'll send a new one.",
+          { duration: 9000 },
+        );
+        window.history.replaceState({}, "", "/signup");
+        setCustMode("signup"); setCustStep("details");
+        setBusy(false);
+        return;
+      }
+      const pendingResolved = details;
       const restore = () => {
-        setCustName(pending.name); setCustPhone(pending.phone); setCustEmail(pending.email);
-        if (pending.dob) setCustDob(new Date(pending.dob));
+        setCustName(pendingResolved.name); setCustPhone(pendingResolved.phone); setCustEmail(pendingResolved.email);
+        if (pendingResolved.dob) setCustDob(new Date(pendingResolved.dob));
         setCustMode("signup"); setCustStep("details");
       };
-      const { error } = await completeEmailVerification(pending.email, href);
+      const { error } = await completeEmailVerification(pendingResolved.email, href);
       // Strip the one-time code from the URL either way so refreshes are clean
       window.history.replaceState({}, "", "/signup");
       if (error) {
@@ -204,7 +244,7 @@ export default function Login() {
         setBusy(false);
         return;
       }
-      const dob = pending.dob ? new Date(pending.dob) : null;
+      const dob = pendingResolved.dob ? new Date(pendingResolved.dob) : null;
       if (!dob || !isValidDob(dob)) {
         // Pending data from the old flow (no DOB) — just have them redo the form
         toast.success("Email verified — please complete your details.");
@@ -213,7 +253,7 @@ export default function Login() {
         return;
       }
       // signUpWithPhone creates the profile + role AND opens the session
-      const { error: signupErr } = await signUpWithPhone(pending.name, pending.phone, dob, pending.email);
+      const { error: signupErr } = await signUpWithPhone(pendingResolved.name, pendingResolved.phone, dob, pendingResolved.email);
       if (signupErr) {
         if (signupErr.toLowerCase().includes("already")) {
           toast.error("You already have an account! Please sign in.");
@@ -463,7 +503,8 @@ export default function Login() {
                         <p className="font-medium text-foreground">Check your inbox 📬</p>
                         <p className="mt-1 text-muted-foreground">
                           We sent a verification link to <span className="font-medium text-foreground">{custEmail.trim()}</span>.
-                          Open it on this device — your account is created and you're logged in the moment you click it.
+                          Open it on any device — your details are saved, and your account is
+                          created the moment you click it.
                         </p>
                         <p className="mt-2 text-xs text-muted-foreground">
                           Nothing arriving? Check spam, or resend below.

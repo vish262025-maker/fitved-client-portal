@@ -9,7 +9,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Plus, Pencil, Trash2 } from "lucide-react";
+import { SocietyDaySetsDialog } from "@/components/admin/SocietyDaySetsDialog";
+import { Plus, Pencil, Trash2, CalendarDays } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 import { trackAdminActivity } from "@/lib/adminActivity";
@@ -26,6 +27,7 @@ interface Society {
 
 export default function Societies() {
   const qc = useQueryClient();
+  const [scheduleFor, setScheduleFor] = useState<Society | null>(null);
   const { can, user } = useAuth();
   const adminId = user?.id ?? null;
   const canDeleteSociety = can("delete_society");
@@ -154,6 +156,7 @@ export default function Societies() {
                   <TableCell><Badge variant="secondary">{members}</Badge></TableCell>
                   <TableCell><Badge variant="secondary">{count}</Badge></TableCell>
                   <TableCell className="text-right">
+                    <Button size="sm" variant="ghost" title="Schedule / day sets" onClick={() => setScheduleFor(s)}><CalendarDays className="h-4 w-4" /></Button>
                     <Button size="sm" variant="ghost" onClick={() => startEdit(s)}><Pencil className="h-4 w-4" /></Button>
                     {canDeleteSociety && (
                       <Button size="sm" variant="ghost" onClick={() => {
@@ -167,6 +170,15 @@ export default function Societies() {
           </TableBody>
         </Table>
       </Card>
+
+      {scheduleFor && (
+        <SocietyDaySetsDialog
+          societyId={scheduleFor.id}
+          societyName={scheduleFor.name}
+          open={!!scheduleFor}
+          onOpenChange={(v) => !v && setScheduleFor(null)}
+        />
+      )}
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent>

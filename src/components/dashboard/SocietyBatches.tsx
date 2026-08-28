@@ -26,7 +26,24 @@ export function SocietyBatches() {
     },
   });
 
-  const societyName = data?.[0]?.society_name;
+  // The society name came only from the first batch row, so a customer whose
+  // society has no batches yet saw the placeholder "Your society". Read it
+  // from their own profile instead — it's true either way.
+  const { data: mySociety } = useQuery({
+    queryKey: ["my-society-name", user?.id],
+    enabled: !!user,
+    queryFn: async () => {
+      const { data: prof } = await (supabase as any)
+        .from("profiles").select("society, society_id").eq("id", user!.id).maybeSingle();
+      if (prof?.society) return prof.society as string;
+      if (!prof?.society_id) return null;
+      const { data: soc } = await (supabase as any)
+        .from("societies").select("name").eq("id", prof.society_id).maybeSingle();
+      return (soc?.name ?? null) as string | null;
+    },
+  });
+
+  const societyName = data?.[0]?.society_name ?? mySociety ?? null;
 
   return (
     <Card className="p-6 rounded-2xl shadow-card">
@@ -36,7 +53,7 @@ export function SocietyBatches() {
         </span>
         <div>
           <p className="text-sm text-muted-foreground">Batches in your society</p>
-          <p className="font-display text-xl">{societyName ?? "Your society"}</p>
+          <p className="font-display text-xl">{societyName ?? "Society not set yet"}</p>
         </div>
       </div>
 
@@ -44,7 +61,9 @@ export function SocietyBatches() {
         <p className="mt-5 text-sm text-muted-foreground">Loading batches…</p>
       ) : !data || data.length === 0 ? (
         <p className="mt-5 text-sm text-muted-foreground">
-          No active batches found yet for your society.
+          {societyName
+            ? `No batches running at ${societyName} yet — your coach will set yours up.`
+            : "Your society is assigned once your plan is active."}
         </p>
       ) : (
         <ul className="mt-5 divide-y divide-border">

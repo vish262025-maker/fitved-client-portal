@@ -50,7 +50,7 @@ interface AuthContextValue {
   // Customer email verification (Firebase email link — clicking it returns
   // to continueUrl in the app; it does NOT log into the app by itself).
   // Used by the signup wizard (/signup) and the add-email card (/dashboard).
-  sendVerificationEmail: (email: string, continueUrl?: string) => Promise<{ error: string | null }>;
+  sendVerificationEmail: (email: string, continueUrl?: string, pending?: { name: string; phone: string; dob: string }) => Promise<{ error: string | null }>;
   completeEmailVerification: (email: string, link: string) => Promise<{ error: string | null }>;
   // Trainer auth via Firebase. Google resolves three ways: existing trainer →
   // logged in; pending trainer → notice; unknown email → access request is
@@ -119,6 +119,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     })();
     return () => { cancelled = true; };
   }, [role, user?.id, impersonating]);
+
+  // A client session must point at a real profile. If it doesn't — a signup
+  // that half-completed, or a customer deleted by an admin — the app used to
+  // render a logged-in dashboard with no name, no plan and no society, which
+  // looks exactly like a broken signup. Close the session instead of showing
+  // a shell. Trainers/admins/super-admins live in other tables, so they are
+  // deliberately not checked here.
+  useEffect(() => {
+    if (loading || roleLoading) return;
+    const id = user?.id;
+    if (!id) return;
+    if (role && role !== "client") return;
+    if (localStorage.getItem("fitved_sa_backup")) return; // impersonating
+
+    let cancelled = false;
+    (async () => {
+      const { data, error } = await supabase
+        .from("profiles").select("id").eq("id", id).maybeSingle();
+      if (cancelled || error) return;           // network hiccup: leave as-is
+      if (data) return;                          // profile exists, all good
+      localStorage.removeItem("fitved_custom_user");
+      localStorage.removeItem("fitved_custom_role");
+      setUser(null);
+      setRole(null);
+    })();
+    return () => { cancelled = true; };
+  }, [user?.id, role, loading, roleLoading]);
 
   // Open the app session for a resolved user id + role.
   const openSession = useCallback((userId: string, appRole: AppRole) => {
@@ -523,7 +550,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Firebase emails a verification LINK (it has no native numeric email OTP).
   // The link's continue-URL points back at /signup, so clicking it returns
   // the customer to the wizard to finish phone + DOB — it never logs them in.
-  const sendVerificationEmail = useCallback(async (email: string, continueUrl = "/signup") => {
+  const sendVerificationEmail = useCallback(async (
+    email: string,
+    continueUrl = "/signup",
+    pending?: { name: string; phone: string; dob: string },
+  ) => {
     const cleanEmail = email.trim().toLowerCase();
     // Block emails already tied to an account
     const { data: existing } = await supabase
@@ -534,9 +565,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (existing) {
       return { error: "This email already has an account. Please sign in with your mobile and birthday." };
     }
+    // Stash the details server-side and put only the token in the link. The
+    // details must NOT ride in the URL — date of birth is the app's password.
+    let url = `${window.location.origin}${continueUrl}`;
+    if (pending) {
+      const { data: token, error: stashErr } = await (supabase as any).rpc("create_pending_signup", {
+        _email: cleanEmail, _name: pending.name, _phone: pending.phone, _dob: pending.dob,
+      });
+      if (stashErr) {
+        // Migration not run yet — fall back to the old localStorage flow so
+        // signup keeps working, just only in this browser.
+        console.warn("create_pending_signup failed:", stashErr.message);
+      } else if (token) {
+        url += `${continueUrl.includes("?") ? "&" : "?"}t=${token}`;
+      }
+    }
+
     try {
       await sendSignInLinkToEmail(firebaseAuth, cleanEmail, {
-        url: `${window.location.origin}${continueUrl}`,
+        url,
         handleCodeInApp: true,
       });
       return { error: null };

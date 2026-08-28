@@ -29,6 +29,35 @@ export function BillingTab({ userId }: { userId: string }) {
     },
   });
 
+  // A priced plan implies a payment. Recording a plan used to skip the ledger
+  // unless it was "active", so past plans left a subscription with no money
+  // against it — invisible here and missing from revenue.
+  const { data: unbilled = [] } = useQuery({
+    queryKey: ["customer-unbilled-plans", userId, items.length],
+    queryFn: async () => {
+      const { data: plans } = await (supabase as any)
+        .from("plans").select("id, amount, discount, status, start_date, payment_status")
+        .eq("user_id", userId);
+      const billed = new Set(items.map((b: any) => b.plan_id).filter(Boolean));
+      return ((plans ?? []) as any[]).filter(
+        (p) =>
+          Number(p.amount ?? 0) - Number(p.discount ?? 0) > 0 &&
+          !billed.has(p.id) &&
+          // An abandoned or failed checkout owes nothing — only flag plans
+          // that were actually taken up.
+          (p.payment_status == null || p.payment_status === "success"),
+      );
+    },
+  });
+
+  const recordFor = (p: any) => {
+    const net = Number(p.amount ?? 0) - Number(p.discount ?? 0);
+    setBillingType("payment");
+    setAmount(String(net));
+    setDate(p.start_date ?? new Date().toISOString().slice(0, 10));
+    setNotes(`Plan payment (${p.status})`);
+  };
+
   const add = useMutation({
     mutationFn: async () => {
       const finalAmount = billingType === "refund" ? -Math.abs(Number(amount)) : Math.abs(Number(amount));
@@ -157,7 +186,30 @@ export function BillingTab({ userId }: { userId: string }) {
       {/* History */}
       <div className="space-y-2">
         <h3 className="font-medium">History</h3>
-        {items.length === 0 ? (
+        {unbilled.length > 0 && (
+        <div className="mb-4 rounded-lg border border-amber-300 bg-amber-50 p-3">
+          <p className="text-sm font-medium text-amber-900">
+            {unbilled.length} plan{unbilled.length === 1 ? "" : "s"} with no payment recorded
+          </p>
+          <p className="mt-0.5 text-xs text-amber-800">
+            These aren't counted in revenue. Add the payment if it was collected.
+          </p>
+          <ul className="mt-2 space-y-1.5">
+            {unbilled.map((p: any) => (
+              <li key={p.id} className="flex flex-wrap items-center justify-between gap-2 text-sm">
+                <span className="text-amber-900">
+                  {p.start_date} · {p.status} · ₹{(Number(p.amount ?? 0) - Number(p.discount ?? 0)).toLocaleString("en-IN")}
+                </span>
+                <Button size="sm" variant="outline" onClick={() => recordFor(p)}>
+                  Record payment
+                </Button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {items.length === 0 ? (
           <p className="text-sm text-muted-foreground">No payments yet.</p>
         ) : items.map((b: any) => {
           const isRefund = Number(b.amount) < 0 || b.type === "refund";

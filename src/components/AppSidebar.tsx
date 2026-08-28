@@ -1,5 +1,5 @@
 import { NavLink, useLocation } from "react-router-dom";
-import { LayoutDashboard, CalendarOff, CreditCard, FileHeart, UserCircle2, Users, Dumbbell, Building2, Gauge, Package, Megaphone, Gift, ShieldCheck, Inbox, ArrowLeftRight } from "lucide-react";
+import { LayoutDashboard, CalendarOff, CreditCard, FileHeart, UserCircle2, Users, Dumbbell, Building2, Gauge, Package, Megaphone, Gift, ShieldCheck, Inbox, ArrowLeftRight, ClipboardList, Video } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/sidebar";
 import { FitvedLogo } from "./FitvedLogo";
 import { useAuth } from "@/contexts/AuthContext";
-import { usePlansTabVisible } from "@/hooks/usePlansTabVisible";
+import { useCanPauseClasses } from "@/hooks/useCanPauseClasses";
 
 const clientItems = [
   { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
@@ -26,6 +26,7 @@ const clientItems = [
 
 const trainerItems = [
   { title: "Dashboard", url: "/trainer", icon: LayoutDashboard },
+  { title: "Availability", url: "/trainer?tab=availability", icon: CalendarOff },
   { title: "Refer & Earn", url: "/trainer/referrals", icon: Gift },
   { title: "Profile", url: "/profile", icon: UserCircle2 },
 ];
@@ -33,20 +34,21 @@ const trainerItems = [
 export function AppSidebar() {
   const { state } = useSidebar();
   const collapsed = state === "collapsed";
-  const { pathname } = useLocation();
+  const { pathname, search } = useLocation();
   const { role } = useAuth();
-  const { visible: plansTabVisible } = usePlansTabVisible();
+  const { canPause } = useCanPauseClasses();
 
   let items = role === "trainer" ? [...trainerItems] : [...clientItems];
   if (role === "admin") {
     items = [
       { title: "Overview", url: "/admin", icon: Gauge },
       { title: "Customers", url: "/admin/customers", icon: Users },
-      { title: "Plans", url: "/admin/plans", icon: Package },
       { title: "Trainers", url: "/admin/trainers", icon: Dumbbell },
       { title: "Societies", url: "/admin/societies", icon: Building2 },
       { title: "Marketing", url: "/admin/marketing", icon: Megaphone },
       { title: "Referrals", url: "/admin/referrals", icon: Gift },
+      { title: "Personal Bookings", url: "/admin/booking-requests", icon: ClipboardList },
+      { title: "Online Customers", url: "/admin/online-customers", icon: Video },
       { title: "Mode Requests", url: "/admin/mode-requests", icon: ArrowLeftRight },
       { title: "Profile", url: "/profile", icon: UserCircle2 },
     ];
@@ -54,17 +56,25 @@ export function AppSidebar() {
     items = [
       { title: "Admins", url: "/super-admin", icon: ShieldCheck },
       { title: "Requests", url: "/super-admin/requests", icon: Inbox },
+      { title: "Plans", url: "/super-admin/plans", icon: Package },
       { title: "Profile", url: "/profile", icon: UserCircle2 },
     ];
-  } else if (role === "client" && !plansTabVisible) {
-    // Admin can hide the Plan tab per customer (default hidden for new users).
-    items = items.filter((i) => i.url !== "/plan");
+  } else if (role === "client") {
+    // Pause is a group-training benefit — not offered online, and not to
+    // one-to-one clients, whose reserved slot cannot simply be paused.
+    if (!canPause) items = items.filter((i) => i.url !== "/pause");
   }
 
-  const isActive = (path: string) =>
-    (path === "/dashboard" || path === "/trainer" || path === "/admin" || path === "/super-admin")
-      ? pathname === path
-      : pathname.startsWith(path);
+  // Some items differ only by query string (trainer Dashboard vs Availability),
+  // so the search has to be part of the comparison or both would light up.
+  const isActive = (path: string) => {
+    const [p, q = ""] = path.split("?");
+    if (q) return pathname === p && search.replace(/^\?/, "") === q;
+    if (p === "/dashboard" || p === "/trainer" || p === "/admin" || p === "/super-admin") {
+      return pathname === p && !search;
+    }
+    return pathname.startsWith(p);
+  };
 
   return (
     <Sidebar collapsible="icon" className="border-r">

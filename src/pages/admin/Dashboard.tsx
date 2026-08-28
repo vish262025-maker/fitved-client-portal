@@ -17,6 +17,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { RevenueSection } from "@/components/admin/RevenueSection";
 
 const RENEWAL_WINDOW = 14; // days ahead to surface expiring plans
 
@@ -295,7 +296,7 @@ export default function AdminDashboard() {
           </span>
           <div>
             <p className="font-display text-lg">Income Breakdown</p>
-            <p className="text-sm text-muted-foreground">Multi-month plans split proportionally across months</p>
+            <p className="text-sm text-muted-foreground">Income <strong>earned</strong> per month — a multi-month plan is spread across the months it covers, so this differs from cash collected.</p>
           </div>
         </div>
 
@@ -406,6 +407,8 @@ export default function AdminDashboard() {
           </DropdownMenu>
         </div>
       </Card>
+
+      <RevenueSection adminId={adminId} earnedByMonth={data?.monthTotals} />
 
       <div className="flex items-center gap-2 pt-2">
         <h2 className="font-display text-xl">Attention queue</h2>

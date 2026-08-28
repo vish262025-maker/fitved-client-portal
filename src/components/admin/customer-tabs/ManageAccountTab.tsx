@@ -63,12 +63,19 @@ export function ManageAccountTab({ userId }: { userId: string }) {
 
       // 2. Delete linked DB records
       await supabase.from("user_roles").delete().eq("user_id", userId);
-      await supabase.from("plans").delete().eq("user_id", userId);
+      // Paid, running plans are protected from deletion by a database trigger.
+      // purge_customer() is the deliberate escape hatch for this flow.
+      const { error: purgeErr } = await (supabase as any).rpc("purge_customer", { _user_id: userId });
+      if (purgeErr) await supabase.from("plans").delete().eq("user_id", userId);
       await (supabase.from("pauses") as any).delete().eq("user_id", userId);
       await (supabase.from("pauses") as any).delete().eq("client_id", userId);
       await supabase.from("billing_history").delete().eq("user_id", userId);
       await supabase.from("tasks").delete().eq("client_id", userId);
       await supabase.from("health_reports").delete().eq("client_id", userId);
+      // Bookings were missed here, which left orphan rows pointing at a
+      // deleted profile — they kept showing up in admin as a nameless
+      // customer with no plan. (training_sessions cascade from plans.)
+      await (supabase as any).from("booking_requests").delete().eq("user_id", userId);
 
       // 3. Delete profile
       const { error } = await supabase.from("profiles").delete().eq("id", userId);

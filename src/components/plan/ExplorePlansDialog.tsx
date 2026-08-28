@@ -1,22 +1,27 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Sparkles, MessageCircle, Check, X } from "lucide-react";
+import { Sparkles, Check, X, ArrowRight } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { visiblePlanOptions } from "@/lib/serviceMode";
+import { latestAssignment, canSkipBooking, repurchase } from "@/lib/repurchase";
 
 const GOLD   = "#f0a720";
 const NAVY   = "#1E3A5F";
 const MUTED  = "#8a8f9e";
 const BORDER = "rgba(30,58,95,0.08)";
 const GOLD_DEEP = "#b07d10";
-const WHATSAPP = "#25D366";
-const WA_NUMBER = "919606047293";
 
 interface Props {
   userId: string;
   customerName: string;
   customerPhone?: string;
 }
+
+type ClassMode = "online" | "offline";
+type TrainingType = "personal" | "group";
 
 interface Option {
   id: string;
@@ -25,8 +30,8 @@ interface Option {
   price: number;
   total_sessions: number | null;
   badge: string | null;
-  training_type?: "personal" | "group";
-  class_mode?: "online" | "offline";
+  training_type?: TrainingType;
+  class_mode?: ClassMode;
 }
 
 /**
@@ -35,35 +40,112 @@ interface Option {
  * the "Explore other plans" dialog for customers mid-plan.
  */
 export function PlanOptionsList({ userId, customerName, customerPhone }: Props) {
-  const [type, setType] = useState<"personal" | "group">("group");
+  const [type, setType] = useState<TrainingType>("group");
+  const navigate = useNavigate();
+  const qc = useQueryClient();
+  const [buying, setBuying] = useState<string | null>(null);
+
+  // An existing customer already told us where and when they train. Changing
+  // plan only changes the price, so we don't ask again — the same assignment
+  // carries over and Proceed opens the gateway directly. A first-time buyer,
+  // or someone switching between online/offline or group/personal, still goes
+  // through the booking flow, because there is something real to ask.
+  const { data: myPlans = [] } = useQuery({
+    queryKey: ["plan-assignments", userId],
+    enabled: !!userId,
+    queryFn: async () => {
+      const { data } = await (supabase as any)
+        .from("plans")
+        .select("training_mode, training_type, society_id, day_set_id, training_days, time_slot, trainer_id, booking_request_id, payment_status, created_at")
+        .eq("user_id", userId)
+        .order("created_at", { ascending: false });
+      return data ?? [];
+    },
+  });
+  const assignment = latestAssignment(myPlans as any);
+
+  const bookingRouteFor = (o: Option) =>
+    (o.class_mode ?? "offline") === "online"
+      ? `/plan/book-online/${o.id}`
+      : `/plan/${(o.training_type ?? "group") === "personal" ? "book-personal" : "book"}/${o.id}`;
+
+  const proceed = async (o: Option) => {
+    if (buying) return;
+    if (!canSkipBooking(assignment, o as any)) { navigate(bookingRouteFor(o)); return; }
+    setBuying(o.id);
+    try {
+      const r = await repurchase(supabase as any, { userId, option: o as any, assignment });
+      if (r.status === "success") {
+        toast.success("Payment received — your plan is active.");
+        await Promise.all([
+          qc.invalidateQueries({ queryKey: ["plan", userId] }),
+          qc.invalidateQueries({ queryKey: ["sessions", userId] }),
+          qc.invalidateQueries({ queryKey: ["plan-assignments", userId] }),
+        ]);
+        navigate("/dashboard");
+        return;
+      }
+      if (r.status === "cancelled") toast.info("Payment cancelled. Nothing has been charged.");
+      else if (r.status === "not_eligible" || r.status === "unavailable") navigate(bookingRouteFor(o));
+      else toast.error((r as any).message ?? "Payment failed");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Couldn't start your purchase");
+    } finally {
+      setBuying(null);
+    }
+  };
+
   const { data: allOptions = [] } = useQuery({
     queryKey: ["plan-options"],
     queryFn: async () => {
-      const { data } = await supabase
-        .from("plan_options").select("*").eq("active", true)
+      // Explicit columns (not "*") so the category fields are always present.
+      const { data } = await (supabase as any)
+        .from("plan_options")
+        .select("id, name, duration_months, price, total_sessions, badge, sort_order, training_type, class_mode")
+        .eq("active", true)
         .order("sort_order").order("duration_months");
       return (data ?? []) as Option[];
     },
   });
 
-  // Customer's own class mode (online/offline) — plans are scoped to it so a
-  // customer only sees the pricing for how they train.
-  const { data: myMode } = useQuery({
+  // Training mode is NOT a customer choice — it comes from the customer's own
+  // assignment (profiles.class_mode, managed by admin via mode-switch requests)
+  // and is never rendered as a selector.
+  const { data: myMode, isPending: modePending } = useQuery({
     queryKey: ["profile-class-mode", userId],
+    // The customer's training mode can change under them — an admin approves a
+    // mode-switch request in a different browser entirely, so nothing in this
+    // session can invalidate it. The app disables refetch-on-focus globally,
+    // which left the plan list showing the wrong mode's prices until a manual
+    // reload. This one query opts back in: it is small, and being wrong about
+    // it means showing someone the wrong catalogue.
+    staleTime: 0,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: true,
+
     enabled: !!userId,
     queryFn: async () => {
       const { data } = await (supabase as any).from("profiles").select("class_mode").eq("id", userId).maybeSingle();
-      return (data?.class_mode ?? null) as "online" | "offline" | null;
+      return (data?.class_mode ?? null) as ClassMode | null;
     },
   });
+  /**
+   * Which catalogue this customer sees.
+   *
+   * `myMode` is undefined until the query resolves, and this used to collapse
+   * that to "offline" — a guess that is wrong for every online customer, so
+   * they were shown offline plans and prices for a moment before the list
+   * flipped under them. An unknown mode is not offline; it is unknown, and the
+   * grid waits rather than showing someone the wrong prices.
+   */
+  const modeKnown = !modePending;
+  const activeMode: ClassMode = myMode === "online" ? "online" : "offline";
 
-  // Independent Personal vs Group catalogs, scoped to the customer's class mode.
-  // Missing columns (pre-migration) fall back so existing customers keep seeing plans.
-  const modeScoped = allOptions.some((o) => "class_mode" in o) && myMode
-    ? allOptions.filter((o) => (o.class_mode ?? "offline") === myMode)
-    : allOptions;
-  const hasTypes = modeScoped.some((o) => "training_type" in o);
-  const options = hasTypes ? modeScoped.filter((o) => (o.training_type ?? "personal") === type) : modeScoped;
+  // A plan belongs to exactly one (mode × type) bucket. Rows created before the
+  // category columns existed are treated as offline group, which is what they
+  // were. Filtering is unconditional — a plan from another bucket can never
+  // reach the grid.
+  const options = modeKnown ? visiblePlanOptions(allOptions, activeMode, type) : [];
 
   const { data: overrides = [] } = useQuery({
     queryKey: ["plan-price-overrides", userId],
@@ -95,13 +177,6 @@ export function PlanOptionsList({ userId, customerName, customerPhone }: Props) 
     const saveAmt = Math.max(0, baselineMonthly - perMonth);
     const savePct = baselineMonthly > 0 ? Math.round((saveAmt / baselineMonthly) * 100) : 0;
     return { perMonth, savePct, saveAmt };
-  };
-
-  const waLink = (o: Option) => {
-    const label = /plan/i.test(o.name) ? o.name : `${o.name} plan`;
-    const signOff = [customerName, customerPhone].filter(Boolean).join(", ");
-    const text = `Hi FitVed, I'm interested in the ${label}.${signOff ? ` — ${signOff}` : ""}`;
-    return `https://wa.me/${WA_NUMBER}?text=${encodeURIComponent(text)}`;
   };
 
   // Pause classes are one-third of total sessions — surfaced as an actual count,
@@ -140,10 +215,11 @@ export function PlanOptionsList({ userId, customerName, customerPhone }: Props) 
     }
 
     // Online Group — live, join-from-anywhere framing (curated, concise).
+    // Online plans deliberately have NO pause classes; that benefit is
+    // offline-only, so it must never be inherited here.
     if (online) {
       const list = [
         { label: `${s} live online group sessions`, included: true },
-        { label: `${p} pause classes`, included: true },
         { label: "Live trainer guidance", included: true },
         { label: "Structured workout plan", included: true },
         { label: "Progress tracking", included: true },
@@ -167,13 +243,15 @@ export function PlanOptionsList({ userId, customerName, customerPhone }: Props) 
     ];
   };
 
-  const Toggle = hasTypes ? (
+  // The only customer-facing selector: training type. Mode stays internal.
+  const Toggle = (
     <div className="flex justify-center">
       <div className="inline-flex rounded-full p-1.5" style={{ background: "rgba(30,58,95,0.06)" }}>
         {(["group", "personal"] as const).map((t) => (
           <button
             key={t}
             onClick={() => setType(t)}
+            aria-pressed={type === t}
             className="rounded-full px-6 py-2.5 text-sm font-semibold transition-all"
             style={type === t
               ? { background: NAVY, color: "#fff", boxShadow: "0 2px 10px rgba(30,58,95,0.22)" }
@@ -184,13 +262,31 @@ export function PlanOptionsList({ userId, customerName, customerPhone }: Props) 
         ))}
       </div>
     </div>
-  ) : null;
+  );
+
+  // Waiting on the mode is not the same as having nothing to show — say so,
+  // and hold the grid's shape so the page doesn't jump when the cards land.
+  if (!modeKnown) {
+    return (
+      <div className="flex flex-col gap-6">
+        {Toggle}
+        <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="animate-pulse rounded-[20px]"
+              style={{ background: "#fff", border: `1px solid ${BORDER}`, height: 420 }} />
+          ))}
+        </div>
+      </div>
+    );
+  }
 
   if (options.length === 0) {
     return (
       <div className="flex flex-col gap-4">
         {Toggle}
-        <p className="text-center" style={{ fontSize: 14, color: MUTED, padding: 8 }}>No plans available right now.</p>
+        <p className="text-center" style={{ fontSize: 14, color: MUTED, padding: 8 }}>
+          No plans available for this selection yet.
+        </p>
       </div>
     );
   }
@@ -269,15 +365,17 @@ export function PlanOptionsList({ userId, customerName, customerPhone }: Props) 
                   while guaranteeing a minimum gap above it. */}
               <div style={{ flexGrow: 1, minHeight: 20 }} />
 
-              <a
-                href={waLink(o)}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center justify-center gap-2 rounded-xl font-semibold"
-                style={{ background: WHATSAPP, color: "#fff", fontSize: 15, padding: "13px 0", textDecoration: "none" }}
+              {/* Existing customers go straight to the gateway; first-timers
+                  and mode switchers go through the flow that asks. */}
+              <button
+                type="button"
+                onClick={() => proceed(o)}
+                disabled={buying === o.id}
+                className="flex items-center justify-center gap-2 rounded-xl font-semibold w-full"
+                style={{ background: NAVY, color: "#fff", fontSize: 15, padding: "13px 0", textDecoration: "none", opacity: buying === o.id ? 0.7 : 1 }}
               >
-                <MessageCircle size={18} color="#fff" /> Chat on WhatsApp
-              </a>
+                {buying === o.id ? "Opening payment…" : <>Proceed <ArrowRight size={18} color="#fff" /></>}
+              </button>
             </div>
           );
         })}

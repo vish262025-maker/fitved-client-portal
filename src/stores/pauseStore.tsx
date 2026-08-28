@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 
 import { calculatePlanEndDate, calculatePlanRenewalDate, extendEndDateBySessions, countLostTrainingDays, isoDate } from "@/lib/sessionPlan";
+import { writePlanCompat, planBaseEndDate } from "@/lib/subscription";
 
 // Today's date as a local YYYY-MM-DD string
 function todayLocalISO(): string {
@@ -69,8 +70,14 @@ export async function recalculatePlanDates(userId: string) {
     const trainingDays = plan.training_days || [];
     if (!trainingDays.length || !plan.start_date || !plan.total_sessions) continue;
 
-    // Base end date (if nothing was missed)
-    let currentEndDate = calculatePlanEndDate(plan.start_date, plan.total_sessions, trainingDays);
+    // Base end date (if nothing was missed). A purchased plan is TIME-based —
+    // start + duration — so recalculating must not silently rewrite its term
+    // from the session count. Legacy plans with no duration keep the
+    // session-derived date they have always had.
+    let currentEndDate =
+      planBaseEndDate(plan as any, () =>
+        calculatePlanEndDate(plan.start_date, plan.total_sessions, trainingDays),
+      ) ?? calculatePlanEndDate(plan.start_date, plan.total_sessions, trainingDays);
     const baseEndISO = isoDate(currentEndDate);
 
     // Count lost training days inside THIS plan's window. Overlapping
@@ -103,14 +110,30 @@ export async function recalculatePlanDates(userId: string) {
     const newEnd = isoDate(currentEndDate);
     const newRenewal = isoDate(renewalDate);
 
+    // Record the commercial terms alongside the dates: baseEndISO is what the
+    // customer was sold, actualExtension is what pauses and trainer off-days
+    // added on top. Storing both makes an extension auditable instead of just
+    // implied by an end date that quietly moved.
+    //
+    // This needs no idempotency guard: every value above is recomputed from
+    // the plan's own start date, so running it twice produces the same dates.
+    // A repeated call can't stack a second extension onto the first.
+    const hasBookkeeping = "original_end_date" in plan;
+    const bookkeepingCurrent =
+      !hasBookkeeping ||
+      ((plan as any).original_end_date === baseEndISO &&
+        (plan as any).pause_extension_days === actualExtension);
+
     // Skip the write when nothing changed — recalc runs from many flows and
     // most plans are already correct.
-    if (plan.end_date === newEnd && plan.renewal_date === newRenewal) continue;
+    if (plan.end_date === newEnd && plan.renewal_date === newRenewal && bookkeepingCurrent) continue;
 
-    const { error: updateError } = await supabase
-      .from("plans")
-      .update({ end_date: newEnd, renewal_date: newRenewal })
-      .eq("id", plan.id);
+    const { error: updateError } = await writePlanCompat(supabase, "update", {
+      end_date: newEnd,
+      renewal_date: newRenewal,
+      original_end_date: baseEndISO,
+      pause_extension_days: actualExtension,
+    }, plan.id);
 
     if (updateError) {
       console.error(`Failed to update plan ${plan.id} dates:`, updateError);

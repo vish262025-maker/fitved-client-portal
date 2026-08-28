@@ -31,7 +31,11 @@ import {
 import { recalculatePlanDates } from "@/stores/pauseStore";
 import { trainerSessionsForMonth, trainerMonthActivity, monthLabel, recentMonthKeys, type DayActivity } from "@/lib/trainerSessions";
 import { toast } from "sonner";
+import { OnlineClients } from "@/components/trainer/OnlineClients";
 import TrainerCompleteProfileDialog from "@/components/trainer/TrainerCompleteProfileDialog";
+import { ServiceModeBoard } from "@/components/trainer/ServiceModeBoard";
+import { usesSociety, isOnlineMode, type ServiceMode } from "@/lib/serviceMode";
+import { sortDays } from "@/lib/daySets";
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
 const NAVY        = "#1E3A5F";
@@ -77,7 +81,13 @@ type OffMode   = "days" | "slot";
 export default function TrainerDashboard() {
   const { user, role, signOut } = useAuth();
   const qc = useQueryClient();
+  // The selected service track drives the whole page, not just the board.
+  const [mode, setMode] = useState<ServiceMode>("offline_group");
+  // `?tab=availability` is the third bottom-nav destination. Kept as a query
+  // param on the same route so all the off-time state and mutations stay put
+  // rather than being threaded through a second page.
   const [searchParams] = useSearchParams();
+  const tabView = searchParams.get("tab") === "availability" ? "availability" : "dashboard";
 
   // Admin "view as trainer": /trainer?as=<trainer_id>. Read-only.
   const viewAsId = role === "admin" ? searchParams.get("as") : null;
@@ -927,6 +937,17 @@ export default function TrainerDashboard() {
                 <span style={{ fontSize: 12, fontWeight: 700, color: MUTED, textTransform: "uppercase", letterSpacing: "0.06em" }}>
                   {slot}
                 </span>
+                {(() => {
+                  // Every client in a batch trains on the same days, so show
+                  // them once here instead of repeating them per person.
+                  const days = slotClients.find((c) => c.training_days?.length)?.training_days ?? [];
+                  // Week order, not whatever order they were stored in.
+                  return days.length ? (
+                    <span style={{ fontSize: 11, color: MUTED, fontWeight: 600 }}>
+                      · {sortDays(days).map((d: string) => d.slice(0, 3)).join(" · ")}
+                    </span>
+                  ) : null;
+                })()}
                 <span className="ml-auto rounded-full"
                   style={{ fontSize: 10, background: GREEN_LIGHT, color: GREEN, padding: "2px 8px", fontWeight: 600 }}>
                   {slotClients.length}
@@ -954,21 +975,29 @@ export default function TrainerDashboard() {
                     {c.phone && (
                       <p style={{ fontSize: 12, color: MUTED }}>{c.phone}</p>
                     )}
-                    {(c.training_days?.length || c.end_date) && (
-                      <div className="flex items-center gap-2 mt-1 flex-wrap">
-                        {c.training_days && c.training_days.length > 0 && (
-                          <span className="inline-flex items-center gap-1 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-600">
-                            <CalendarOff className="h-3 w-3 opacity-0 hidden" /> {/* spacer hack if needed, or just text */}
-                            {c.training_days.join(" - ")}
-                          </span>
-                        )}
-                        {c.end_date && (
-                          <span className="inline-flex items-center gap-1 text-[11px] text-slate-500">
-                            Ends: {new Date(c.end_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
-                          </span>
-                        )}
-                      </div>
-                    )}
+                    {(() => {
+                      // Plan state, so a client whose plan has ended is still
+                      // listed and labelled rather than looking plan-less.
+                      const state = (c as any).plan_state
+                        ?? (c.end_date ? (c.end_date >= new Date().toISOString().slice(0, 10) ? "active" : "expired") : "none");
+                      const pill = state === "active"
+                        ? ["Active", "#1b7a43", "rgba(27,122,67,0.10)"]
+                        : state === "expired"
+                          ? ["Plan ended", "#b07d10", "rgba(176,125,16,0.12)"]
+                          : ["No plan", MUTED, "rgba(30,58,95,0.06)"];
+                      return (
+                        <div className="mt-1 flex flex-wrap items-center gap-2">
+                          <span className="rounded-full px-2 py-0.5 text-[10px] font-semibold"
+                            style={{ color: pill[1], background: pill[2] }}>{pill[0]}</span>
+                          {c.end_date && (
+                            <span className="text-[11px]" style={{ color: MUTED }}>
+                              {state === "expired" ? "Ended" : "Ends"}{" "}
+                              {new Date(c.end_date).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })()}
                   </div>
                   <div className="flex items-center gap-2 flex-shrink-0">
                     <button
@@ -1135,6 +1164,7 @@ export default function TrainerDashboard() {
           <Plus size={16} /> {addOff.isPending ? "Saving…" : isViewAs ? "Read only" : "Save off time"}
         </button>
       </div>
+
 
       {/* Upcoming off times list */}
       {offTimes.length > 0 && (
@@ -1419,109 +1449,55 @@ export default function TrainerDashboard() {
         {/* Hero */}
         <div style={{
           background: `linear-gradient(135deg, ${NAVY} 0%, ${NAVY_LIGHT} 100%)`,
-          padding: "16px 20px 24px",
+          padding: "12px 16px 14px",
         }}>
-          <p style={{ color: "rgba(255,255,255,0.65)", fontSize: 13 }}>{greeting}</p>
-          <h2 className="font-display" style={{ fontSize: 26, fontWeight: 600, color: "#fff", letterSpacing: "-0.02em" }}>
+          <p style={{ color: "rgba(255,255,255,0.65)", fontSize: 12 }}>{greeting}</p>
+          <h2 className="font-display" style={{ fontSize: 20, fontWeight: 600, color: "#fff", letterSpacing: "-0.02em", lineHeight: 1.15 }}>
             {firstName}
           </h2>
           {trainer?.specialization && (
-            <p style={{ color: "rgba(255,255,255,0.6)", fontSize: 12, marginTop: 2 }}>
+            <p style={{ color: "rgba(255,255,255,0.6)", fontSize: 11, marginTop: 1 }}>
               {trainer.specialization}
             </p>
           )}
-          <div className="flex gap-3 mt-4">
-            <div className="rounded-2xl px-3 py-2 text-center flex-1"
-              style={{ background: "rgba(255,255,255,0.10)" }}>
-              <p style={{ fontSize: 20, fontWeight: 700, color: GOLD }}>
-                {societies.reduce((sum, s) => sum + (batchMap[s.id]?.reduce((a, b) => a + b.client_count, 0) ?? 0), 0)}
-              </p>
-              <p style={{ fontSize: 10, color: "rgba(255,255,255,0.6)", marginTop: 1 }}>Total clients</p>
-            </div>
-            <div className="rounded-2xl px-3 py-2 text-center flex-1"
-              style={{ background: "rgba(255,255,255,0.10)" }}>
-              <p style={{ fontSize: 20, fontWeight: 700, color: GOLD }}>{societies.length}</p>
-              <p style={{ fontSize: 10, color: "rgba(255,255,255,0.6)", marginTop: 1 }}>Societies</p>
-            </div>
-            <div className="rounded-2xl px-3 py-2 text-center flex-1"
-              style={{ background: "rgba(255,255,255,0.10)" }}>
-              <p style={{ fontSize: 20, fontWeight: 700, color: GOLD }}>{offTimes.length}</p>
-              <p style={{ fontSize: 10, color: "rgba(255,255,255,0.6)", marginTop: 1 }}>Off times</p>
-            </div>
-            <div className="rounded-2xl px-3 py-2 text-center flex-1"
-              style={{ background: "rgba(255,255,255,0.10)" }}
-              title="Classes taken in the selected month — off-days excluded, extra classes included">
-              <p style={{ fontSize: 20, fontWeight: 700, color: GOLD }}>{sessionsThisMonth ?? "—"}</p>
-              <p style={{ fontSize: 10, color: "rgba(255,255,255,0.6)", marginTop: 1 }}>Sessions</p>
-            </div>
-          </div>
-
-          {/* Month picker for the sessions count — lets trainers see past months */}
-          <div className="mt-3">
-            <Select value={sessionMonth} onValueChange={setSessionMonth}>
-              <SelectTrigger className="h-9 w-full rounded-xl border-none text-sm font-semibold text-white"
-                style={{ background: "rgba(255,255,255,0.12)" }}>
-                <span className="mr-1 text-white/55">Sessions in</span><SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {monthOptions.map((mk) => (
-                  <SelectItem key={mk} value={mk}>{monthLabel(mk)}{mk === currentMonthKey ? " · this month" : ""}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
         </div>
 
-        {/* Tab switcher */}
-        <div className="flex mx-4 mt-4 mb-4 rounded-2xl overflow-hidden"
-          style={{ border: `1px solid ${BORDER}`, background: "#fff" }}>
-          {([["societies", "My Societies", Building2], ["offtime", "Off Time", CalendarOff]] as any[]).map(
-            ([t, label, Icon]) => (
-              <button key={t} onClick={() => { setTab(t); setSelectedSociety(null); }}
-                className="flex-1 flex items-center justify-center gap-2 py-3 border-none cursor-pointer transition-all"
-                style={{
-                  background: tab === t ? NAVY : "transparent",
-                  color: tab === t ? "#fff" : MUTED,
-                  fontSize: 13,
-                  fontWeight: tab === t ? 700 : 500,
-                  borderRadius: 12,
-                }}>
-                <Icon size={15} />
-                {label}
-              </button>
-            )
-          )}
-        </div>
-
-        {/* Tab content */}
-        {tab === "societies" && (
-          selectedSociety
-            ? <ClientList society={selectedSociety} />
-            : (
-              <>
-                <SocietiesList />
-                <div className="mx-4 mt-4">
-                  <ActivityCalendar />
-                </div>
-                {!isViewAs && (
-                  <div className="mx-4 mt-4">
-                    <TrainerPauses />
-                  </div>
-                )}
-              </>
-            )
+        {/* One scrolling page, same order as desktop. The old My Societies /
+            Off Time tabs sat above the mode board, so switching them changed
+            content far below the fold and looked like nothing happened. */}
+        {tabView === "availability" ? (
+          /* Own tab: marking off-days and recording make-up classes are
+             occasional admin jobs, not part of the daily view. */
+          <div className="mt-4">
+            <p className="mx-4 mb-2 font-display text-lg" style={{ color: NAVY }}>Availability</p>
+            <OffTimeForm />
+          </div>
+        ) : selectedSociety ? (
+          <ClientList society={selectedSociety} />
+        ) : (
+          <>
+            <div className="px-3 pt-3 pb-1">
+              <ServiceModeBoard
+                trainerId={trainer?.id}
+                mode={mode}
+                onModeChange={setMode}
+                onOpenGroup={(g) => {
+                  const soc = societies.find((x) => x.id === g.society_id);
+                  if (soc) setSelectedSociety(soc);
+                }}
+              />
+            </div>
+            {!isViewAs && <div className="mx-4 mt-4"><TrainerPauses /></div>}
+            <MarketingFeed className="mx-4 mt-4" />
+          </>
         )}
-        {tab === "offtime" && <OffTimeForm />}
-
-        {/* Marketing feed */}
-        {tab === "societies" && !selectedSociety && <MarketingFeed className="mx-4 mt-4" />}
 
         {/* bottom padding for nav */}
         <div style={{ height: 24 }} />
       </div>
 
       {/* ── Desktop Layout ─────────────────────────────────────────── */}
-      <div className="hidden md:block space-y-6">
+      <div className="mx-auto hidden w-full max-w-5xl space-y-6 md:block">
         {/* Header */}
         <header>
           <h1 className="font-display text-3xl text-foreground">
@@ -1532,165 +1508,23 @@ export default function TrainerDashboard() {
           )}
         </header>
 
-        {/* Stats row */}
-        <div className="grid grid-cols-4 gap-4">
-          {[
-            { label: "Total clients", value: societies.reduce((sum, s) => sum + (batchMap[s.id]?.reduce((a, b) => a + b.client_count, 0) ?? 0), 0) },
-            { label: "Societies", value: societies.length },
-            { label: "Upcoming off times", value: offTimes.length },
-          ].map((stat) => (
-            <div key={stat.label} className="rounded-2xl p-5 shadow-sm"
-              style={{ background: "#fff", border: `1px solid ${BORDER}` }}>
-              <p className="text-3xl font-display font-bold" style={{ color: NAVY }}>{stat.value}</p>
-              <p className="text-sm text-muted-foreground mt-1">{stat.label}</p>
-            </div>
-          ))}
-          {/* Sessions — with a month picker so past months stay visible */}
-          <div className="rounded-2xl p-5 shadow-sm" style={{ background: "#fff", border: `1px solid ${BORDER}` }}>
-            <p className="text-3xl font-display font-bold" style={{ color: NAVY }}>{sessionsThisMonth ?? "—"}</p>
-            <div className="mt-1 flex items-center justify-between gap-1">
-              <p className="text-sm text-muted-foreground">Sessions</p>
-              <Select value={sessionMonth} onValueChange={setSessionMonth}>
-                <SelectTrigger className="h-7 w-auto gap-1 border-none bg-transparent px-1 text-xs font-semibold shadow-none focus:ring-0"
-                  style={{ color: NAVY }}>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {monthOptions.map((mk) => (
-                    <SelectItem key={mk} value={mk}>{monthLabel(mk)}{mk === currentMonthKey ? " · this month" : ""}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-        </div>
+        {tabView === "dashboard" && (
+          <ServiceModeBoard trainerId={trainer?.id} mode={mode} onModeChange={setMode} />
+        )}
 
-        <div className="grid grid-cols-2 gap-6">
-          {/* Societies */}
+
+        {/* Online roster — only for the online tracks. */}
+        {isOnlineMode(mode) && <OnlineClients trainerId={trainer?.id ?? null} />}
+
+        {/* Batches / clients, then availability — stacked so the calendar
+            above stays the primary surface. */}
+        <div className="space-y-6">
+          {/* My batches — societies are an OFFLINE concept only. */}
+          
+          {/* Availability + make-up classes: their own tab, not the daily view. */}
+          {tabView === "availability" && (
           <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <h2 className="font-display text-xl">My Societies</h2>
-              {selectedSociety && (
-                <Button variant="ghost" size="sm" onClick={() => setSelectedSociety(null)}>
-                  <ArrowLeft className="mr-1 h-4 w-4" /> All societies
-                </Button>
-              )}
-            </div>
-
-            {!selectedSociety ? (
-              societies.length === 0 ? (
-                <div className="rounded-2xl p-6 text-center"
-                  style={{ background: "#fff", border: `1px solid ${BORDER}` }}>
-                  <Building2 size={32} color={MUTED} className="mx-auto mb-2" />
-                  <p className="text-sm text-muted-foreground">No societies assigned yet.</p>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {societies.map((s) => {
-                    const batches = batchMap[s.id] ?? [];
-                    const totalClients = batches.reduce((sum, b) => sum + b.client_count, 0);
-                    return (
-                      <button key={s.id} onClick={() => setSelectedSociety(s)}
-                        className="w-full text-left rounded-2xl p-4 cursor-pointer transition-shadow hover:shadow-md"
-                        style={{ background: "#fff", border: `1px solid ${BORDER}` }}>
-                        <div className="flex items-start justify-between">
-                          <div>
-                            <p className="font-semibold" style={{ color: NAVY }}>{s.name}</p>
-                            {s.address && <p className="text-xs text-muted-foreground mt-0.5">{s.address}</p>}
-                            <div className="flex flex-wrap gap-1.5 mt-2">
-                              {batches.map((b) => (
-                                <span key={b.time_slot}
-                                  className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs"
-                                  style={{ background: "rgba(240,167,32,0.12)", color: "#a07010" }}>
-                                  <Clock size={10} /> {b.time_slot} · {b.client_count}
-                                </span>
-                              ))}
-                              {/* Skip admin-defined slots already shown as a batch chip */}
-                              {slotsForSociety(s.id).filter((slot) => !batches.some((b) => b.time_slot === slot)).map((slot) => (
-                                <span key={`def-${slot}`}
-                                  className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs"
-                                  style={{ background: "rgba(30,58,95,0.07)", color: NAVY, fontWeight: 600 }}>
-                                  <Clock size={10} /> {slot}
-                                </span>
-                              ))}
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <Badge variant="secondary">{totalClients} clients</Badge>
-                            <ChevronRight size={16} color={MUTED} />
-                          </div>
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-              )
-            ) : (
-              <div className="rounded-2xl overflow-hidden"
-                style={{ background: "#fff", border: `1px solid ${BORDER}` }}>
-                <div className="p-4" style={{ borderBottom: `1px solid ${BORDER}` }}>
-                  <div className="flex items-center gap-2">
-                    <Building2 size={18} color={NAVY} />
-                    <p className="font-semibold" style={{ color: NAVY }}>{selectedSociety.name}</p>
-                    <Badge variant="secondary" className="ml-auto">{clients.length} clients</Badge>
-                  </div>
-                </div>
-                {clientsLoading ? (
-                  <div className="p-6 text-center text-sm text-muted-foreground">Loading…</div>
-                ) : clients.length === 0 ? (
-                  <div className="p-6 text-center text-sm text-muted-foreground">No clients in this society.</div>
-                ) : (
-                  Object.entries(clientsBySlot).map(([slot, slotClients]) => (
-                    <div key={slot}>
-                      <div className="px-4 py-2 flex items-center gap-2"
-                        style={{ background: "rgba(30,58,95,0.03)", borderBottom: `1px solid ${BORDER}` }}>
-                        <Clock size={12} color={MUTED} />
-                        <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{slot}</span>
-                        <span className="ml-auto text-xs font-semibold"
-                          style={{ background: GREEN_LIGHT, color: GREEN, padding: "2px 8px", borderRadius: 99 }}>
-                          {slotClients.length}
-                        </span>
-                      </div>
-                      {slotClients.map((c, i) => (
-                        <div key={c.id}
-                          className="flex items-center gap-3 px-4 py-3"
-                          style={{ borderBottom: i < slotClients.length - 1 ? `1px solid ${BORDER}` : "none" }}>
-                          <UserCircle2 size={20} color={MUTED} />
-                          <div className="flex-1 min-w-0">
-                            <p className="font-medium text-sm truncate">{c.name ?? "Unnamed"}</p>
-                            {c.phone && <p className="text-xs text-muted-foreground">{c.phone}</p>}
-                          </div>
-                          {c.phone && (
-                            <div className="flex items-center gap-1.5">
-                              <a href={phoneLinks(c.phone).tel} title="Call"
-                                className="grid place-items-center rounded-full hover:opacity-80"
-                                style={{ width: 28, height: 28, background: "rgba(30,58,95,0.07)" }}>
-                                <PhoneIcon size={13} color={NAVY} />
-                              </a>
-                              <a href={phoneLinks(c.phone).wa} target="_blank" rel="noopener noreferrer" title="WhatsApp"
-                                className="grid place-items-center rounded-full hover:opacity-80"
-                                style={{ width: 28, height: 28, background: GREEN_LIGHT }}>
-                                <svg width="13" height="13" viewBox="0 0 24 24" fill={GREEN}>
-                                  <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
-                                </svg>
-                              </a>
-                            </div>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  ))
-                )}
-              </div>
-            )}
-
-            {/* Class activity calendar — fills the space under the societies list */}
-            {!selectedSociety && <ActivityCalendar />}
-          </div>
-
-          {/* Off Time */}
-          <div className="space-y-4">
-            <h2 className="font-display text-xl">Off Time</h2>
+            <h2 className="font-display text-xl">Availability</h2>
 
             {/* Form card */}
             <div className="rounded-2xl p-5"
@@ -1830,13 +1664,11 @@ export default function TrainerDashboard() {
 
             <MakeupSection />
           </div>
+          )}
         </div>
 
-        {/* Client pauses */}
-        {!isViewAs && <TrainerPauses />}
-
-        {/* Marketing feed */}
-        <MarketingFeed />
+        {tabView === "dashboard" && !isViewAs && <TrainerPauses />}
+        {tabView === "dashboard" && <MarketingFeed />}
       </div>
 
       <TrainerClientPauseModal

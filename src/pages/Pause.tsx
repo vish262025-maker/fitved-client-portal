@@ -11,9 +11,12 @@ import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { usePauseStore } from "@/stores/pauseStore";
 import { formatDate, daysBetween } from "@/lib/dates";
+import { Navigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
+import { useCanPauseClasses } from "@/hooks/useCanPauseClasses";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { deriveSubscriptionStatus, isPaid } from "@/lib/subscription";
 
 // Count how many of the client's training days fall within [from, to] inclusive
 function countSessionsInRange(from: Date, to: Date, trainingDays: string[]): number {
@@ -52,6 +55,11 @@ function toLocalISODate(d: Date): string {
 
 export default function Pause() {
   const { user } = useAuth();
+  // Pause is a group-training benefit. Anyone it doesn't apply to — online
+  // customers, and one-to-one clients whose reserved slot cannot be paused —
+  // is sent home rather than shown a section they cannot use. Hiding the nav
+  // link is not enough on its own: this URL is still typeable.
+  const { blocked, loading: modeLoading } = useCanPauseClasses();
   const { activePause, history, pause, resume } = usePauseStore();
   const [range, setRange] = useState<DateRange | undefined>();
   const [calOpen, setCalOpen] = useState(false);
@@ -121,7 +129,12 @@ export default function Pause() {
   const todayStr = toLocalISODate(new Date());
   const isLocked = activePause && activePause.from <= todayStr;
 
-  const hasActivePlan = activePlan && activePlan.status === "active";
+  const hasActivePlan = deriveSubscriptionStatus(activePlan) === "active";
+
+  // Online customers don't get pause classes — send them home rather than
+  // render a section that doesn't apply to their plan. Checked before every
+  // other early return so a direct URL can't slip past it.
+  if (!modeLoading && blocked) return <Navigate to="/dashboard" replace />;
 
   if (!hasActivePlan) {
     return (

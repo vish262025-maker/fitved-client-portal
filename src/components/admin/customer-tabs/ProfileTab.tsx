@@ -7,8 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
 import { ClassCalendar } from "@/components/dashboard/ClassCalendar";
+import { useSessions } from "@/hooks/useSessions";
 import { toast } from "sonner";
 import { trackAdminActivity } from "@/lib/adminActivity";
 import { useAuth } from "@/contexts/AuthContext";
@@ -108,13 +108,25 @@ export function ProfileTab({ userId }: { userId: string }) {
     queryFn: async () => {
       const { data } = await supabase
         .from("plans")
-        .select("start_date, end_date, training_days, status")
+        .select("start_date, end_date, training_days, status, payment_status")
         .eq("user_id", userId)
         .order("created_at", { ascending: true });
-      return (data ?? []) as { start_date: string; end_date: string; training_days: string[] | null; status: string }[];
+      // A checkout the customer abandoned is not a plan. Including them
+      // stretched the calendar across date ranges nobody ever bought — and
+      // whichever was created last decided what "their plan" was.
+      // NULL payment_status = collected outside the app, which counts as paid.
+      return ((data ?? []) as any[]).filter(
+        (p) => p.payment_status == null || p.payment_status === "success",
+      ) as { start_date: string; end_date: string; training_days: string[] | null; status: string }[];
     },
   });
   const calPlan = allCalPlans.length ? allCalPlans[allCalPlans.length - 1] : null;
+
+  // The customer's real session rows. Without them ClassCalendar falls back to
+  // deriving days from the plan's date range, which marks every training day
+  // in that range as a class — so a plan that has not started yet showed
+  // classes already attended, and months of classes that do not exist.
+  const { data: customerSessions = [] } = useSessions(userId);
   const calRange = useMemo(() => {
     if (!allCalPlans.length) return null;
     const starts = allCalPlans.map((p) => p.start_date).sort();
@@ -248,32 +260,6 @@ export function ProfileTab({ userId }: { userId: string }) {
     onError: (e) => toast.error(e instanceof Error ? e.message : "Save failed"),
   });
 
-  // ── Plan-tab visibility (per customer) ─────────────────────────────────────
-  // Default: hidden for new sign-ups, shown once they have any plan. Admin can
-  // force either way; the stored override wins over the automatic default.
-  const hasPlanHistory = !!calPlan;
-  const plansTabOverride = (profile as any)?.plans_tab_visible;
-  const plansTabOn =
-    plansTabOverride === true || plansTabOverride === false ? plansTabOverride : hasPlanHistory;
-  const setPlansTab = useMutation({
-    mutationFn: async (visible: boolean) => {
-      const { error } = await (supabase as any)
-        .from("profiles").update({ plans_tab_visible: visible }).eq("id", userId);
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      toast.success("Plan tab visibility updated");
-      qc.invalidateQueries({ queryKey: ["customer-profile", userId] });
-      qc.invalidateQueries({ queryKey: ["plans-tab-visible"] });
-    },
-    onError: (e) =>
-      toast.error(
-        e instanceof Error && /column|schema cache|does not exist/i.test(e.message)
-          ? "Run the plans_tab_visible migration in Supabase first"
-          : e instanceof Error ? e.message : "Update failed",
-      ),
-  });
-
   const toggleRole = useMutation({
     mutationFn: async ({ role, add }: { role: AppRole; add: boolean }) => {
       if (add) {
@@ -334,7 +320,7 @@ export function ProfileTab({ userId }: { userId: string }) {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="space-y-1.5">
+            <div className="min-w-0 space-y-1.5">
               <Label>Society</Label>
               <Select value={societyId || "none"} onValueChange={(v) => setSocietyId(v === "none" ? "" : v)}>
                 <SelectTrigger><SelectValue placeholder="Select society first" /></SelectTrigger>
@@ -346,7 +332,7 @@ export function ProfileTab({ userId }: { userId: string }) {
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-1.5">
+            <div className="min-w-0 space-y-1.5">
               <Label>Assigned trainer</Label>
               <Select disabled={!societyId} value={trainerId || "none"} onValueChange={(v) => { setTrainerId(v === "none" ? "" : v); setCustomTime(false); }}>
                 <SelectTrigger><SelectValue placeholder={societyId ? "Select trainer" : "Select society first"} /></SelectTrigger>
@@ -358,7 +344,7 @@ export function ProfileTab({ userId }: { userId: string }) {
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-1.5">
+            <div className="min-w-0 space-y-1.5">
               <Label>Time slot</Label>
               {trainerId && trainerSlots.length > 0 && !customTime ? (
                 <Select
@@ -379,16 +365,18 @@ export function ProfileTab({ userId }: { userId: string }) {
                   </SelectContent>
                 </Select>
               ) : (
-                <div className="flex items-center gap-1.5">
+                <div className="flex w-full min-w-0 items-center gap-1.5">
                   <Input
                     type="time"
+                    className="min-w-0 flex-1 px-2"
                     value={startTime}
                     onChange={(e) => setStartTime(e.target.value)}
                     aria-label="Slot start time"
                   />
-                  <span className="text-muted-foreground">–</span>
+                  <span className="shrink-0 text-muted-foreground">–</span>
                   <Input
                     type="time"
+                    className="min-w-0 flex-1 px-2"
                     value={endTime}
                     onChange={(e) => setEndTime(e.target.value)}
                     aria-label="Slot end time"
@@ -437,28 +425,6 @@ export function ProfileTab({ userId }: { userId: string }) {
             {save.isPending ? "Saving…" : "Save profile"}
           </Button>
 
-          <div className="border-t pt-5">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <Label>Show &quot;Plan&quot; tab to customer</Label>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  When off, this customer won&apos;t see the Plan tab in their app. New sign-ups
-                  start off; it turns on automatically once they have a plan.
-                </p>
-              </div>
-              <Switch
-                checked={plansTabOn}
-                onCheckedChange={(v) => setPlansTab.mutate(v)}
-                disabled={setPlansTab.isPending}
-              />
-            </div>
-            {plansTabOverride == null && (
-              <p className="mt-2 text-[11px] text-muted-foreground">
-                Currently <span className="font-medium">{plansTabOn ? "on" : "off"}</span> automatically
-                {" "}({hasPlanHistory ? "customer has a plan" : "no plan yet"}). Toggling sets it manually.
-              </p>
-            )}
-          </div>
         </div>
 
         {/* ── Class calendar (same view the customer sees) ─────────────────── */}
@@ -502,6 +468,7 @@ export function ProfileTab({ userId }: { userId: string }) {
                 highlightDate={calPlan.end_date}
                 planActive={calPlan.status === "active"}
                 planRanges={calRange?.ranges}
+                sessions={customerSessions}
               />
             </div>
           ) : (

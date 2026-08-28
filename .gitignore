@@ -41,3 +41,6 @@ scripts/firebase-service-account.json
 fitved-seo-bot.json
 seo-report.json
 seo-weekly-report.md
+
+# Kept local only — not published
+.env.example

@@ -1,5 +1,4 @@
-import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -9,12 +8,13 @@ import { CreditCard, CheckCircle2, CalendarDays, Gift, ArrowRight } from "lucide
 import { formatDate, daysBetween } from "@/lib/dates";
 import { useAuth } from "@/contexts/AuthContext";
 import { useProfile } from "@/hooks/useProfile";
-import { usePlansTabVisible } from "@/hooks/usePlansTabVisible";
 import { usePauseStore } from "@/stores/pauseStore";
 import { ExplorePlansDialog, PlanOptionsList } from "@/components/plan/ExplorePlansDialog";
+import { TrainingHistory } from "@/components/plan/TrainingHistory";
 import { calculatePlanEndDate, calculatePlanRenewalDate, extendEndDateBySessions, countLostTrainingDays, isoDate, formatPlanName } from "@/lib/sessionPlan";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { deriveSubscriptionStatus, isPaid } from "@/lib/subscription";
 
 const GOLD       = "#f0a720";
 const NAVY       = "#1E3A5F";
@@ -29,15 +29,7 @@ const GOLD_DEEP  = "#b07d10";
 const WEEK_DAYS  = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 export default function Plan() {
-  const { user, role } = useAuth();
-  const navigate = useNavigate();
-  const { visible: plansTabVisible, isLoading: plansTabLoading } = usePlansTabVisible();
-  // If admin has hidden the Plan tab for this customer, they can't reach it by URL.
-  useEffect(() => {
-    if (role === "client" && !plansTabLoading && !plansTabVisible) {
-      navigate("/dashboard", { replace: true });
-    }
-  }, [role, plansTabLoading, plansTabVisible, navigate]);
+  const { user } = useAuth();
   const { data: profile } = useProfile();
   const { history, activePause } = usePauseStore();
   const customerName = profile?.name ?? "";
@@ -115,7 +107,7 @@ export default function Plan() {
     }
   };
 
-  const isActive = plan && plan.status === "active";
+  const isActive = deriveSubscriptionStatus(plan) === "active";
 
   if (!isActive) {
     return (
@@ -141,6 +133,11 @@ export default function Plan() {
               <PlanOptionsList userId={user.id} customerName={customerName} customerPhone={profile?.phone ?? ""} />
             </div>
           )}
+          {user && (
+            <div className="mx-4 mb-6">
+              <TrainingHistory userId={user.id} />
+            </div>
+          )}
         </div>
         {/* Desktop empty state */}
         <div className="hidden md:block space-y-6">
@@ -157,6 +154,11 @@ export default function Plan() {
             <div className="max-w-[1120px]">
               <h2 className="font-display text-2xl mb-5">Choose your plan</h2>
               <PlanOptionsList userId={user.id} customerName={customerName} customerPhone={profile?.phone ?? ""} />
+            </div>
+          )}
+          {user && (
+            <div className="max-w-[1120px]">
+              <TrainingHistory userId={user.id} />
             </div>
           )}
         </div>
@@ -513,8 +515,14 @@ export default function Plan() {
             </div>
             <div className="sm:col-span-2 flex items-center justify-between rounded-xl bg-muted/50 px-4 py-3">
               <div>
-                <p className="font-medium">Auto-renewal</p>
-                <p className="text-xs text-muted-foreground">Renew automatically at the end of each cycle.</p>
+                {/* Nothing reads auto_renew to take a payment — Razorpay
+                    one-time orders can't charge again without a mandate. Say
+                    what it actually does rather than promise a charge. */}
+                <p className="font-medium">Renewal reminder</p>
+                <p className="text-xs text-muted-foreground">
+                  Tell us you'd like to continue — your coach will set up the next cycle
+                  before this one ends. No payment is taken automatically.
+                </p>
               </div>
               <Switch checked={autoRenew} onCheckedChange={handleAutoRenew} />
             </div>

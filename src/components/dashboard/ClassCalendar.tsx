@@ -29,9 +29,17 @@ interface Props {
   highlightDate?: string; // optional — rings a specific day (e.g. plan end date)
   planActive?: boolean; // when false, future training days won't show as "upcoming"
   planRanges?: { start: string; end: string }[]; // when set, dates outside all ranges are gaps (rest)
+  /** Online plans have no pause benefit — hides the pause legend for them. */
+  showPause?: boolean;
+  /**
+   * Real session records. When present these WIN over the derived
+   * classification: a class the trainer actually marked is the truth, not what
+   * the dates imply. Falls back to derivation when the sessions table is empty.
+   */
+  sessions?: { session_date: string; status: string; attended: boolean | null }[];
 }
 
-type DayState = "attended" | "upcoming" | "paused" | "off" | "rest" | "outside";
+type DayState = "attended" | "upcoming" | "paused" | "off" | "missed" | "rest" | "outside";
 
 function todayLocalISO() {
   const d = new Date();
@@ -51,7 +59,7 @@ export { offTimeAffectsSlot } from "@/lib/sessionPlan";
 
 interface Cell { d: number; date: string; dow: number; state: DayState; isToday: boolean }
 
-export function ClassCalendar({ startDate, endDate, trainingDays, pauses, offTimes, customerSlot, expanded, onExpandedChange, highlightDate, planActive, planRanges }: Props) {
+export function ClassCalendar({ startDate, endDate, trainingDays, pauses, offTimes, customerSlot, expanded, onExpandedChange, highlightDate, planActive, planRanges, showPause = true, sessions }: Props) {
   const today = todayLocalISO();
   const [selected, setSelected] = useState<string | null>(null);
 
@@ -64,7 +72,27 @@ export function ClassCalendar({ startDate, endDate, trainingDays, pauses, offTim
     return set;
   }, [trainingDays]);
 
+  const byDate = useMemo(() => {
+    const m: Record<string, { status: string; attended: boolean | null }> = {};
+    for (const s of sessions ?? []) m[s.session_date] = { status: s.status, attended: s.attended };
+    return m;
+  }, [sessions]);
+
   const classify = (date: string, dow: number): DayState => {
+    // Real records first — a marked class outranks anything the dates imply.
+    if (sessions?.length) {
+      const rec = byDate[date];
+      if (rec) {
+        if (rec.attended === true || rec.status === "completed") return "attended";
+        if (rec.status === "paused") return "paused";
+        if (rec.status === "trainer_off") return "off";
+        if (rec.status === "missed") return "missed";
+        if (rec.status === "cancelled") return "rest";
+        return date < today ? "missed" : "upcoming";
+      }
+      if (date < startDate || date > endDate) return "outside";
+      return "rest";
+    }
     if (date < startDate || date > endDate) return "outside";
     if (planRanges?.length && !planRanges.some((r) => date >= r.start && date <= r.end)) return "rest";
     if (pauses.some((p) => inRange(date, p.from, p.to))) return trainingIdx.has(dow) ? "paused" : "outside";
@@ -312,10 +340,12 @@ export function ClassCalendar({ startDate, endDate, trainingDays, pauses, offTim
           </span>
           Upcoming
         </span>
-        <span className="flex items-center gap-1.5" style={{ fontSize: 11, color: MUTED }}>
-          <Pause size={11} color={GOLD_DEEP} fill={GOLD} strokeWidth={0} />
-          Paused
-        </span>
+        {showPause && (
+          <span className="flex items-center gap-1.5" style={{ fontSize: 11, color: MUTED }}>
+            <Pause size={11} color={GOLD_DEEP} fill={GOLD} strokeWidth={0} />
+            Paused
+          </span>
+        )}
         <span className="flex items-center gap-1.5" style={{ fontSize: 11, color: MUTED }}>
           <span className="flex items-center justify-center rounded-[5px]"
             style={{ width: 15, height: 15, background: "rgba(210,59,52,0.07)", border: "1px solid rgba(210,59,52,0.35)" }}>

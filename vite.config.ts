@@ -1,4 +1,4 @@
-import { defineConfig, type Connect } from "vite";
+import { defineConfig, loadEnv, type Connect } from "vite";
 import react from "@vitejs/plugin-react-swc";
 import path from "path";
 import fs from "fs";
@@ -115,7 +115,54 @@ function serveBlogRedirects(): Connect.NextHandleFunction {
 }
 
 // https://vitejs.dev/config/
-export default defineConfig(({ mode }) => ({
+
+/**
+ * Serves the /api/* Vercel functions during `npm run dev`.
+ *
+ * Without this, Vite hands back the handler's TypeScript SOURCE for /api/...
+ * with a 200, so the app reads the payment gateway as unavailable and the
+ * checkout can never open locally. Production is unaffected — Vercel runs the
+ * same files itself.
+ */
+function serveApiFunctions(server: any, root: string) {
+  return async function (req: any, res: any, next: Connect.NextFunction) {
+    const url = req.url ?? "";
+    if (!url.startsWith("/api/")) return next();
+
+    const rel = url.split("?")[0].replace(/^\/+/, "");
+    const file = path.resolve(root, `${rel}.ts`);
+    if (!fs.existsSync(file)) return next();
+
+    try {
+      const mod = await server.ssrLoadModule(file);
+      const handler = mod.default;
+      if (typeof handler !== "function") return next();
+
+      // Vercel handlers read req.body and call res.status().send().
+      if (mod.config?.api?.bodyParser !== false) {
+        const raw = await new Promise<string>((resolve) => {
+          let d = ""; req.on("data", (c: Buffer) => (d += c)); req.on("end", () => resolve(d));
+        });
+        try { req.body = raw ? JSON.parse(raw) : {}; } catch { req.body = raw; }
+      }
+      res.status = (code: number) => { res.statusCode = code; return res; };
+      res.send = (body: any) => { res.end(typeof body === "string" ? body : JSON.stringify(body)); return res; };
+      res.json = (body: any) => {
+        res.setHeader("Content-Type", "application/json");
+        res.end(JSON.stringify(body)); return res;
+      };
+      await handler(req, res);
+    } catch (err) {
+      res.statusCode = 500;
+      res.end(JSON.stringify({ error: (err as Error).message }));
+    }
+  };
+}
+
+export default defineConfig(({ mode }) => {
+  // /api handlers read plain process.env, not import.meta.env.
+  Object.assign(process.env, loadEnv(mode, process.cwd(), ""));
+  return {
   server: {
     host: "::",
     port: 8080,
@@ -128,12 +175,13 @@ export default defineConfig(({ mode }) => ({
     mode === "development" && componentTagger(),
     {
       name: "serve-clean-urls",
-      configureServer(server) {
+      configureServer(server: any) {
+        server.middlewares.use(serveApiFunctions(server, path.resolve(__dirname)));
         server.middlewares.use(serveBlogRedirects());
         server.middlewares.use(serveCleanUrls(path.resolve(__dirname, "public")));
         server.middlewares.use(serveSocieties(path.resolve(__dirname, "public/societies")));
       },
-      configurePreviewServer(server) {
+      configurePreviewServer(server: any) {
         server.middlewares.use(serveBlogRedirects());
         server.middlewares.use(serveCleanUrls(path.resolve(__dirname, "dist")));
         server.middlewares.use(serveSocieties(path.resolve(__dirname, "dist/societies")));
@@ -146,4 +194,5 @@ export default defineConfig(({ mode }) => ({
     },
     dedupe: ["react", "react-dom", "react/jsx-runtime", "react/jsx-dev-runtime", "@tanstack/react-query", "@tanstack/query-core"],
   },
-}));
+};
+});

@@ -3,7 +3,12 @@
   "redirects": [
     {
       "source": "/:path(.*)",
-      "has": [{ "type": "host", "value": "getfitved.com" }],
+      "has": [
+        {
+          "type": "host",
+          "value": "getfitved.com"
+        }
+      ],
       "destination": "https://www.getfitved.com/:path",
       "permanent": true
     },
@@ -2689,8 +2694,14 @@
       "destination": "/prenatal-postnatal-yoga-bangalore.html"
     },
     {
-      "source": "/((?!societies)(?!.*\\.html$).*)",
+      "source": "/((?!api/)(?!societies)(?!.*\\.html$).*)",
       "destination": "/"
+    }
+  ],
+  "crons": [
+    {
+      "path": "/api/cron/expire",
+      "schedule": "30 18 * * *"
     }
   ]
 }

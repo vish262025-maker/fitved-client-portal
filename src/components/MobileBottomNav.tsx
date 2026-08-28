@@ -14,7 +14,7 @@ import {
   Inbox,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
-import { usePlansTabVisible } from "@/hooks/usePlansTabVisible";
+import { useCanPauseClasses } from "@/hooks/useCanPauseClasses";
 
 const CLIENT_TABS = [
   { path: "/dashboard", Icon: LayoutDashboard, label: "Home" },
@@ -25,8 +25,9 @@ const CLIENT_TABS = [
 ];
 
 const TRAINER_TABS = [
-  { path: "/trainer",  Icon: LayoutDashboard, label: "Home" },
-  { path: "/profile",  Icon: UserCircle2,     label: "Profile" },
+  { path: "/trainer",                    Icon: LayoutDashboard, label: "Home" },
+  { path: "/trainer?tab=availability",   Icon: CalendarOff,     label: "Availability" },
+  { path: "/profile",                    Icon: UserCircle2,     label: "Profile" },
 ];
 
 const ADMIN_TABS = [
@@ -47,14 +48,16 @@ export function MobileBottomNav() {
   const location = useLocation();
   const navigate = useNavigate();
   const { role } = useAuth();
-  const { visible: plansTabVisible } = usePlansTabVisible();
+  const { canPause } = useCanPauseClasses();
 
   let NAV_TABS = role === "trainer" ? TRAINER_TABS
     : role === "admin" ? ADMIN_TABS
     : role === "super_admin" ? SUPER_ADMIN_TABS
     : CLIENT_TABS;
-  if (role === "client" && !plansTabVisible) {
-    NAV_TABS = NAV_TABS.filter((t) => t.path !== "/plan");
+  // Pause is a group-training benefit — not offered online, and not to
+  // one-to-one clients, whose reserved slot cannot simply be paused.
+  if (role === "client" && !canPause) {
+    NAV_TABS = NAV_TABS.filter((t) => t.path !== "/pause");
   }
 
   return (
@@ -68,7 +71,11 @@ export function MobileBottomNav() {
       }}
     >
       {NAV_TABS.map(({ path, Icon, label }) => {
-        const active = location.pathname === path;
+        // Some tabs differ only by query string (trainer Home vs Availability),
+        // so compare the full destination rather than just the pathname.
+        const [tabPath, tabQuery = ""] = path.split("?");
+        const active = location.pathname === tabPath
+          && (location.search.replace(/^\?/, "") === tabQuery);
         return (
           <button
             key={path}

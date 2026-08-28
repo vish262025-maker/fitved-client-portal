@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import { trackAdminActivity } from "@/lib/adminActivity";
 import { format } from "date-fns";
@@ -15,7 +15,10 @@ import {
   calculatePlanEndDate, calculatePlanRenewalDate,
   countLostTrainingDays, extendEndDateBySessions, isoDate,
 } from "@/lib/sessionPlan";
-import { CustomPlanPrices } from "./CustomPlanPrices";
+import { useAuth } from "@/contexts/AuthContext";
+import { isLockedIn } from "@/lib/subscription";
+import { Textarea } from "@/components/ui/textarea";
+
 
 // Plan lifecycle: "active" (running), "completed" (ran its course and ended),
 // or "stopped" (customer stopped buying plans / churned — admin-set). Pauses
@@ -90,6 +93,9 @@ export function PlanTab({ userId }: { userId: string }) {
   // "Custom plan" mode: a one-off personal plan for this customer — any
   // session count and price, without touching the Plans catalog.
   const [customPlan, setCustomPlan] = useState(false);
+  // Which catalogue plan this subscription is. Recorded on save so revenue
+  // reporting can attribute the plan instead of filing it under "Manual".
+  const [planOptionId, setPlanOptionId] = useState<string | null>(null);
   useEffect(() => {
     // Load the latest plan whatever its status, so the Status dropdown always
     // reflects reality (a completed/stopped plan must not show as "Active" here
@@ -97,6 +103,9 @@ export function PlanTab({ userId }: { userId: string }) {
     // the "Renew / extend" section below, not by blanking this form.
     if (plan) {
       setTotalSessions(plan.total_sessions);
+      // Carry the existing catalogue link forward, so saving an untouched plan
+      // cannot silently unlink it from the plan it was actually sold as.
+      setPlanOptionId((plan as any).plan_option_id ?? null);
       setTrainingDays(plan.training_days ?? []);
       setStartDate(plan.start_date);
       setEndDate(plan.end_date);
@@ -109,6 +118,7 @@ export function PlanTab({ userId }: { userId: string }) {
     } else {
       // Clear inputs for new plan creation when no plan exists at all
       setTotalSessions(12);
+      setPlanOptionId(null);
       setTrainingDays([]);
       setStartDate(new Date().toISOString().slice(0, 10));
       setEndDate("");
@@ -175,6 +185,14 @@ export function PlanTab({ userId }: { userId: string }) {
     setRenewalDate(isoDate(renewal));
   }, [startDate, totalSessions, trainingDays, totalExtension]);
 
+  const { user: adminUser } = useAuth();
+
+  // A paid, running plan can only be ended early as a recorded exception —
+  // the database rejects the update without a reason (20260825130000).
+  const lockedIn = isLockedIn(plan as any);
+  const endingEarly = lockedIn && status !== "active";
+  const [cancelReason, setCancelReason] = useState("");
+
   const toggleDay = (day: string, on: boolean) => {
     setTrainingDays((prev) =>
       on ? [...prev, day] : prev.filter((d) => d !== day)
@@ -184,11 +202,15 @@ export function PlanTab({ userId }: { userId: string }) {
   const save = useMutation({
     mutationFn: async () => {
       if (!trainingDays.length) throw new Error("Select at least one training day");
+      if (endingEarly && !cancelReason.trim()) {
+        throw new Error("Give a reason for ending this paid plan early.");
+      }
       // `any` payload: the generated types don't yet include the "stopped"
       // status enum value (added by migration 20260807120000).
       const payload: any = {
         user_id: userId,
         total_sessions: totalSessions,
+        plan_option_id: planOptionId,
         training_days: trainingDays,
         start_date: startDate,
         end_date: endDate,
@@ -198,6 +220,11 @@ export function PlanTab({ userId }: { userId: string }) {
         payment_method: paymentMethod || null,
         auto_renew: autoRenew,
         status,
+        // Ending a purchased plan early is an exception, not a status tweak:
+        // send who decided it and why, or the database refuses the change.
+        ...(endingEarly
+          ? { cancellation_reason: cancelReason.trim(), cancelled_by: adminUser?.id ?? null }
+          : {}),
       };
       if (plan) {
         const { data, error } = await supabase.from("plans").update(payload).eq("id", plan.id).select();
@@ -248,7 +275,10 @@ export function PlanTab({ userId }: { userId: string }) {
       if (saved && amount > 0) {
         const desc = `Plan: ${totalSessions} sessions (starts ${startDate})`;
 
-        if (status === "active") {
+        // A completed or stopped plan was still paid for — gating this on
+        // "active" meant recording a past plan created no payment entry, so
+        // its value never reached billing or the revenue totals.
+        {
           const netAmt = amount - discount;
           if (netAmt > 0) {
             // One payment row per plan: match by plan_id first so edits to the
@@ -382,25 +412,57 @@ export function PlanTab({ userId }: { userId: string }) {
     return overrideMap.get(opt.id) ?? Number(opt.price);
   };
 
-  // Sessions dropdown, built from the live Plans catalog — a plan added in
+  // Plan dropdown, built from the live Plans catalog — a plan added in
   // Admin → Plans shows up here automatically. Trial (8) is kept as a
   // built-in when the catalog doesn't define it.
-  const sessionDropdownOptions = useMemo(() => {
-    const opts: { sessions: number; label: string }[] = [];
-    for (const o of planOptions) {
+  //
+  // Grouped by how the plan is delivered, because price only means something
+  // in context: 36 sessions is ₹9,597 as an offline group plan, ₹5,700 online
+  // group and ₹19,000 online personal. The old list keyed on session count
+  // alone, so those three collapsed into one row and the admin saw a single
+  // arbitrary price. Each catalogue row is now its own entry under its own
+  // heading, and picking one records which plan it was.
+  const planDropdownGroups = useMemo(() => {
+    const groupLabel = (o: any) =>
+      `${(o.class_mode ?? "offline") === "online" ? "Online" : "Offline"} · ` +
+      `${(o.training_type ?? "group") === "personal" ? "Personal training" : "Group training"}`;
+
+    const groups = new Map<string, { value: string; sessions: number; label: string }[]>();
+    for (const o of planOptions as any[]) {
       if (o.total_sessions == null) continue;
-      if (opts.some((x) => x.sessions === o.total_sessions)) continue;
       const price = overrideMap.get(o.id) ?? Number(o.price);
-      opts.push({
+      const key = groupLabel(o);
+      const list = groups.get(key) ?? [];
+      list.push({
+        value: `opt:${o.id}`,
         sessions: o.total_sessions,
         label: `${o.total_sessions} sessions · ${o.name} · ₹${price.toLocaleString("en-IN")}${overrideMap.has(o.id) ? " (custom price)" : ""}`,
       });
+      groups.set(key, list);
     }
-    if (!opts.some((x) => x.sessions === 8)) {
-      opts.push({ sessions: 8, label: "8 sessions · trial / recovery" });
+
+    const out = [...groups.entries()]
+      .map(([heading, items]) => ({ heading, items: items.sort((a, b) => a.sessions - b.sessions) }))
+      // Offline first — it is what most customers are on.
+      .sort((a, b) => a.heading.localeCompare(b.heading));
+
+    const hasTrial = [...groups.values()].some((l) => l.some((x) => x.sessions === 8));
+    if (!hasTrial) {
+      out.push({ heading: "Other", items: [{ value: "sessions:8", sessions: 8, label: "8 sessions · trial / recovery" }] });
     }
-    return opts.sort((a, b) => a.sessions - b.sessions);
+    return out;
   }, [planOptions, overrideMap]);
+
+  // Which dropdown entry is showing. Prefer the plan's recorded catalogue row;
+  // fall back to matching on session count for plans saved before this tab
+  // stored one.
+  const selectedPlanValue = useMemo(() => {
+    if (customPlan) return "custom";
+    if (planOptionId) return `opt:${planOptionId}`;
+    const match = (planOptions as any[]).find((o) => o.total_sessions === totalSessions);
+    if (match) return `opt:${match.id}`;
+    return `sessions:${totalSessions}`;
+  }, [customPlan, planOptionId, planOptions, totalSessions]);
 
   // A loaded plan whose session count isn't in the catalog is a custom plan.
   useEffect(() => {
@@ -530,26 +592,44 @@ export function PlanTab({ userId }: { userId: string }) {
         <div className="space-y-1.5">
           <Label>Plan / sessions</Label>
           <Select
-            value={customPlan ? "custom" : String(totalSessions)}
+            value={selectedPlanValue}
             onValueChange={(v) => {
               if (v === "custom") {
                 setCustomPlan(true);
                 return;
               }
               setCustomPlan(false);
-              const val = Number(v);
+
+              if (v.startsWith("opt:")) {
+                const id = v.slice(4);
+                const opt: any = (planOptions as any[]).find((o) => o.id === id);
+                if (!opt) return;
+                setPlanOptionId(id);
+                setTotalSessions(Number(opt.total_sessions ?? 0));
+                // Price comes from the Plans catalog (per-customer override
+                // first), so it always matches whatever the admin has set there.
+                setAmount(overrideMap.get(id) ?? Number(opt.price));
+                return;
+              }
+
+              // The built-in trial, which has no catalogue row.
+              const val = Number(v.replace("sessions:", ""));
+              setPlanOptionId(null);
               setTotalSessions(val);
-              // Price comes from the Plans catalog (per-customer override first),
-              // so it always matches whatever the admin has set there.
               const catalogPrice = priceForSessions(val);
               if (catalogPrice != null) setAmount(catalogPrice);
-              else if (val === 8) setAmount(0); // trial — not in the catalog
+              else if (val === 8) setAmount(0);
             }}
           >
             <SelectTrigger><SelectValue /></SelectTrigger>
             <SelectContent>
-              {sessionDropdownOptions.map((o) => (
-                <SelectItem key={o.sessions} value={String(o.sessions)}>{o.label}</SelectItem>
+              {planDropdownGroups.map((g) => (
+                <SelectGroup key={g.heading}>
+                  <SelectLabel>{g.heading}</SelectLabel>
+                  {g.items.map((o) => (
+                    <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                  ))}
+                </SelectGroup>
               ))}
               <SelectItem value="custom">Custom plan — set sessions &amp; price manually</SelectItem>
             </SelectContent>
@@ -695,6 +775,30 @@ export function PlanTab({ userId }: { userId: string }) {
             Pauses don't change this — manage breaks in the Pauses tab. Expired plans complete automatically.
             {status === "stopped" && " Marking Stopped keeps existing records but won't add any new billing."}
           </p>
+
+          {endingEarly && (
+            <div className="mt-3 rounded-lg border border-destructive/40 bg-destructive/5 p-3">
+              <p className="text-xs font-medium text-destructive">
+                This plan is paid for and runs until {endDate}.
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Purchased plans aren't cancelled mid-term. Ending it now stops the
+                customer's access immediately and is recorded against your account,
+                so use it only for a refund or a genuine dispute.
+              </p>
+              <Label htmlFor="cancel-reason" className="mt-3 block text-xs">
+                Reason (required)
+              </Label>
+              <Textarea
+                id="cancel-reason"
+                value={cancelReason}
+                onChange={(e) => setCancelReason(e.target.value)}
+                placeholder="e.g. Refunded in full — customer relocated to Pune"
+                className="mt-1 text-sm"
+                rows={2}
+              />
+            </div>
+          )}
         </div>
       </div>
 
@@ -785,7 +889,6 @@ export function PlanTab({ userId }: { userId: string }) {
         </div>
       )}
 
-      <CustomPlanPrices userId={userId} />
     </div>
   );
 }

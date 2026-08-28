@@ -21,7 +21,7 @@ import Profile from "./pages/Profile";
 import AdminDashboard from "./pages/admin/Dashboard";
 import Customers from "./pages/admin/Customers";
 import CustomerDetail from "./pages/admin/CustomerDetail";
-import AdminPlans from "./pages/admin/Plans";
+import SuperAdminPlans from "./pages/admin/SuperAdminPlans";
 import Trainers from "./pages/admin/Trainers";
 import Societies from "./pages/admin/Societies";
 import Marketing from "./pages/admin/Marketing";
@@ -30,6 +30,11 @@ import SuperAdmin from "./pages/admin/SuperAdmin";
 import AdminProfile from "./pages/admin/AdminProfile";
 import SuperAdminRequests from "./pages/admin/SuperAdminRequests";
 import ModeRequests from "./pages/admin/ModeRequests";
+import BookingRequests from "./pages/admin/BookingRequests";
+import OnlineCustomers from "./pages/admin/OnlineCustomers";
+import BookPlan from "./pages/BookPlan";
+import BookPersonalPlan from "./pages/BookPersonalPlan";
+import BuyOnlinePlan from "./pages/BuyOnlinePlan";
 import SuperAdminLogin from "./pages/SuperAdminLogin";
 import Corporate from "./pages/Corporate";
 import FaqsPage from "./pages/FaqsPage";
@@ -118,6 +123,9 @@ const App = () => (
                 <Route path="/dashboard" element={<ProtectedRoute allow={["client", "admin"]}><Dashboard /></ProtectedRoute>} />
                 <Route path="/pause" element={<ProtectedRoute allow={["client", "admin"]}><Pause /></ProtectedRoute>} />
                 <Route path="/plan" element={<ProtectedRoute allow={["client", "admin"]}><Plan /></ProtectedRoute>} />
+                <Route path="/plan/book/:planId" element={<ProtectedRoute allow={["client"]}><BookPlan /></ProtectedRoute>} />
+                <Route path="/plan/book-personal/:planId" element={<ProtectedRoute allow={["client"]}><BookPersonalPlan /></ProtectedRoute>} />
+                <Route path="/plan/book-online/:planId" element={<ProtectedRoute allow={["client"]}><BuyOnlinePlan /></ProtectedRoute>} />
                 <Route path="/health" element={<ProtectedRoute allow={["client", "admin"]}><Health /></ProtectedRoute>} />
 
                 {/* Shared */}
@@ -131,16 +139,20 @@ const App = () => (
                 <Route path="/admin" element={<ProtectedRoute allow={["admin"]}><AdminDashboard /></ProtectedRoute>} />
                 <Route path="/admin/customers" element={<ProtectedRoute allow={["admin"]}><Customers /></ProtectedRoute>} />
                 <Route path="/admin/customers/:id" element={<ProtectedRoute allow={["admin"]}><CustomerDetail /></ProtectedRoute>} />
-                <Route path="/admin/plans" element={<ProtectedRoute allow={["admin"]}><AdminPlans /></ProtectedRoute>} />
                 <Route path="/admin/trainers" element={<ProtectedRoute allow={["admin"]}><Trainers /></ProtectedRoute>} />
                 <Route path="/admin/societies" element={<ProtectedRoute allow={["admin"]}><Societies /></ProtectedRoute>} />
                 <Route path="/admin/marketing" element={<ProtectedRoute allow={["admin"]}><Marketing /></ProtectedRoute>} />
                 <Route path="/admin/referrals" element={<ProtectedRoute allow={["admin"]}><AdminReferrals /></ProtectedRoute>} />
                 <Route path="/admin/mode-requests" element={<ProtectedRoute allow={["admin"]}><ModeRequests /></ProtectedRoute>} />
+                <Route path="/admin/booking-requests" element={<ProtectedRoute allow={["admin"]}><BookingRequests /></ProtectedRoute>} />
+                {/* Billing merged into Overview — keep the URL working. */}
+                <Route path="/admin/billing" element={<Navigate to="/admin" replace />} />
+                <Route path="/admin/online-customers" element={<ProtectedRoute allow={["admin"]}><OnlineCustomers /></ProtectedRoute>} />
 
                 {/* Super Admin */}
                 <Route path="/super-admin" element={<ProtectedRoute allow={["super_admin"]}><SuperAdmin /></ProtectedRoute>} />
                 <Route path="/super-admin/requests" element={<ProtectedRoute allow={["super_admin"]}><SuperAdminRequests /></ProtectedRoute>} />
+                <Route path="/super-admin/plans" element={<ProtectedRoute allow={["super_admin"]}><SuperAdminPlans /></ProtectedRoute>} />
                 <Route path="/super-admin/admins/:id" element={<ProtectedRoute allow={["super_admin"]}><AdminProfile /></ProtectedRoute>} />
               </Route>
               <Route path="/index" element={<Navigate to="/dashboard" replace />} />

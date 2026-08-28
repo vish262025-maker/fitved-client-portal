@@ -16,6 +16,9 @@ import { useProfile } from "@/hooks/useProfile";
 import { supabase } from "@/integrations/supabase/client";
 import { usePauseStore, recalculatePlanDates } from "@/stores/pauseStore";
 import { toast } from "sonner";
+import { latestAssignment, canSkipBooking, repurchase } from "@/lib/repurchase";
+import { supportWhatsAppUrl, SUPPORT_WHATSAPP_DISPLAY } from "@/lib/support";
+import { useCanPauseClasses } from "@/hooks/useCanPauseClasses";
 import { SocietyBatches } from "@/components/dashboard/SocietyBatches";
 import { TrainerPauses } from "@/components/dashboard/TrainerPauses";
 import { ProgressRing } from "@/components/ui/progress-ring";
@@ -23,6 +26,10 @@ import { ClassCalendar } from "@/components/dashboard/ClassCalendar";
 import { MarketingFeed } from "@/components/dashboard/MarketingFeed";
 import { AddEmailCard } from "@/components/dashboard/AddEmailCard";
 import { ClassModeGate } from "@/components/dashboard/ClassModeGate";
+import { OnlineSessionCard } from "@/components/dashboard/OnlineSessionCard";
+import { useIsOnlineCustomer } from "@/hooks/useIsOnlineCustomer";
+import { deriveSubscriptionStatus, isPaid } from "@/lib/subscription";
+import { useSessions } from "@/hooks/useSessions";
 
 // ── Design tokens ──────────────────────────────────────────────────────────────
 const GOLD       = "#f0a720";
@@ -56,6 +63,9 @@ export default function Dashboard() {
   const { user, role } = useAuth();
   const { data: profile } = useProfile();
   const { activePause, history } = usePauseStore();
+  // Pause classes are offline-only, so online customers never see them.
+  const { isOnline: isOnlineCustomer } = useIsOnlineCustomer();
+  const { canPause } = useCanPauseClasses();
   const navigate = useNavigate();
 
   // Class-calendar expand state — controllable from the calendar and the next-session card.
@@ -71,23 +81,39 @@ export default function Dashboard() {
   const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
 
   // ── Data queries (unchanged from original) ──────────────────────────────────
+  /**
+   * "Your plan" means the plan they bought.
+   *
+   * This took the newest row of any kind, so abandoning a checkout replaced a
+   * real, completed subscription with the unpaid shell of one — the dashboard
+   * then said "this plan was never activated" to a customer who had in fact
+   * paid, trained, and finished a plan. A never-paid row is only the answer
+   * when there is no purchase to show at all.
+   */
   const { data: plan } = useQuery({
     queryKey: ["plan", user?.id],
     enabled: !!user,
     queryFn: async () => {
       const { data } = await supabase
         .from("plans").select("*").eq("user_id", user!.id)
-        .order("created_at", { ascending: false }).limit(1).maybeSingle();
-      return data;
+        .order("created_at", { ascending: false });
+      const rows = data ?? [];
+      // NULL payment_status = collected outside the app, which counts as paid.
+      const paid = rows.find((p: any) => p.payment_status == null || p.payment_status === "success");
+      return paid ?? rows[0] ?? null;
     },
   });
+
+  // Real session records for this customer — the calendar prefers these over
+  // deriving days from the plan's date range.
+  const { data: mySessions = [] } = useSessions(user?.id);
 
   const { data: allPlans = [] } = useQuery({
     queryKey: ["all-plans-cal", user?.id],
     enabled: !!user,
     queryFn: async () => {
-      const { data } = await supabase
-        .from("plans").select("start_date, end_date, training_days, status")
+      const { data } = await (supabase as any)
+        .from("plans").select("start_date, end_date, training_days, status, payment_status")
         .eq("user_id", user!.id)
         .order("created_at", { ascending: true });
       return (data ?? []) as { start_date: string; end_date: string; training_days: string[] | null; status: string }[];
@@ -95,16 +121,22 @@ export default function Dashboard() {
   });
 
   const calRange = useMemo(() => {
-    if (!allPlans.length) return null;
-    const starts = allPlans.map((p) => p.start_date).sort();
-    const ends = allPlans.map((p) => p.end_date).sort();
+    // A checkout that was never paid still has a start/end date. Including it
+    // painted classes across months the customer never bought — her calendar
+    // ran to November off the back of three abandoned attempts.
+    const paidPlans = allPlans.filter(
+      (p: any) => p.payment_status == null || p.payment_status === "success",
+    );
+    if (!paidPlans.length) return null;
+    const starts = paidPlans.map((p) => p.start_date).sort();
+    const ends = paidPlans.map((p) => p.end_date).sort();
     const allDays = new Set<string>();
-    allPlans.forEach((p) => (p.training_days ?? []).forEach((d) => allDays.add(d)));
+    paidPlans.forEach((p: any) => (p.training_days ?? []).forEach((d: string) => allDays.add(d)));
     return {
       startDate: starts[0],
       endDate: ends[ends.length - 1],
       trainingDays: [...allDays],
-      ranges: allPlans.map((p) => ({ start: p.start_date, end: p.end_date })),
+      ranges: paidPlans.map((p: any) => ({ start: p.start_date, end: p.end_date })),
     };
   }, [allPlans]);
 
@@ -127,6 +159,32 @@ export default function Dashboard() {
       const { data } = await supabase
         .from("trainers").select("name").eq("id", profile!.trainer_id!).maybeSingle();
       return data?.name ?? null;
+    },
+  });
+
+  // Online customers' trainer/schedule come from their booking, not from the
+  // society-based profile fields.
+  const { data: onlineBooking } = useQuery({
+    queryKey: ["dash-online-booking", user?.id],
+    enabled: !!user && isOnlineCustomer,
+    queryFn: async () => {
+      const { data } = await (supabase as any)
+        .from("booking_requests")
+        .select("trainer_id, preferred_time")
+        .eq("user_id", user!.id).eq("training_mode", "online")
+        .in("status", ["pending_trainer_assignment", "trainer_assigned", "training_ongoing"])
+        .order("created_at", { ascending: false }).limit(1).maybeSingle();
+      return data ?? null;
+    },
+  });
+
+  const { data: onlineTrainerName } = useQuery({
+    queryKey: ["dash-online-trainer", onlineBooking?.trainer_id],
+    enabled: !!onlineBooking?.trainer_id,
+    queryFn: async () => {
+      const { data } = await (supabase as any)
+        .from("trainers").select("name").eq("id", onlineBooking.trainer_id).maybeSingle();
+      return (data?.name ?? null) as string | null;
     },
   });
 
@@ -163,9 +221,12 @@ export default function Dashboard() {
   const { data: planOptions = [] } = useQuery({
     queryKey: ["plan-options"],
     queryFn: async () => {
-      const { data } = await supabase
-        .from("plan_options").select("id,price,total_sessions").eq("active", true);
-      return data ?? [];
+      // `as any`: the generated types predate the category columns, which
+      // exist in the live database.
+      const { data } = await (supabase as any)
+        .from("plan_options").select("id,price,total_sessions,class_mode,training_type").eq("active", true);
+      return (data ?? []) as { id: string; price: number; total_sessions: number;
+        class_mode: string | null; training_type: string | null }[];
     },
   });
 
@@ -179,21 +240,40 @@ export default function Dashboard() {
     },
   });
 
+  // The catalogue row they are renewing into — the same plan they bought.
+  const renewOption = (() => {
+    const optId = (plan as any)?.plan_option_id;
+    if (!optId) return null;
+    return planOptions.find((o: any) => o.id === optId) ?? null;
+  })();
+
+  /**
+   * What Renew costs: the listed price of the plan they are renewing.
+   *
+   * Not what the old plan happened to cost. A discount an admin gave on one
+   * term is a one-off for that term — carrying it forward would quietly make
+   * every future renewal cheaper than the plan is sold for. Where a customer
+   * has their own listed price, that is what their plan cards already show,
+   * so that is what they are charged. /api/payments/create-order resolves the
+   * identical figure server-side before charging it.
+   */
   const renewalPrice = (() => {
-    if (!plan) return 0;
-    const matched = planOptions.find((o) => o.total_sessions === plan.total_sessions);
-    if (matched) {
-      const override = priceOverrides.find((o) => o.plan_option_id === matched.id);
-      return Math.round(Number(override?.price ?? matched.price));
+    if (renewOption) {
+      const own = priceOverrides.find((o) => o.plan_option_id === (renewOption as any).id);
+      return Math.round(Number(own?.price ?? (renewOption as any).price ?? 0));
     }
-    // No catalog match — fall back to what they last paid (net of discount)
-    return Math.round(Math.max(0, Number(plan.amount) - Number(plan.discount ?? 0)));
+    // No catalogue row to price against — fall back to what the plan records.
+    return plan ? Math.round(Number(plan.amount ?? 0)) : 0;
   })();
 
   // ── Derived values ──────────────────────────────────────────────────────────
   const totalDays   = plan ? daysBetween(plan.start_date, plan.end_date) : 0;
   const elapsedDays = plan ? daysBetween(plan.start_date, new Date().toISOString()) : 0;
-  const progress    = totalDays > 0 ? Math.min(100, Math.round((elapsedDays / totalDays) * 100)) : 0;
+  // Clamped at both ends: a plan that starts tomorrow has negative elapsed
+  // days, which drove the progress bar and "sessions used" below zero.
+  const progress    = totalDays > 0
+    ? Math.max(0, Math.min(100, Math.round((elapsedDays / totalDays) * 100)))
+    : 0;
   const sessionsUsed  = plan ? Math.round((plan.total_sessions * progress) / 100) : 0;
   const sessionsLeft  = plan ? Math.max(0, plan.total_sessions - sessionsUsed) : 0;
 
@@ -248,7 +328,9 @@ export default function Dashboard() {
   // Expired plans complete automatically (legacy "paused" rows migrate too).
   // Renewal is always a manual admin action.
   useEffect(() => {
-    if (plan && (plan.status === "active" || plan.status === "paused")) {
+    // An unpaid plan is not "running", so it must never auto-complete —
+    // that would quietly retire a subscription that was never activated.
+    if (plan && isPaid(plan) && (plan.status === "active" || plan.status === "paused")) {
       const todayISO = todayLocalISO();
       if (plan.end_date < todayISO) {
         supabase
@@ -267,12 +349,55 @@ export default function Dashboard() {
   // ── Renewal urgency ───────────────────────────────────────────────────────
   const todayISO    = todayLocalISO();
   const planEnded   = plan?.status === "cancelled" || plan?.status === "completed" || plan?.status === "paused" || (plan as any)?.status === "stopped";
-  const hasActivePlan = plan && plan.status === "active";
+  // Derived, not read off the row: a plan past its end date or awaiting
+  // payment is not active no matter what `status` still says.
+  /**
+   * A plan the customer can actually train on.
+   *
+   * A personal plan waiting on its trainer is paid for but has not begun —
+   * showing it as running gave a progress ring, a "sessions left" count and a
+   * renewal date for a term that has not started, next to a card saying we are
+   * still arranging their trainer. It counts as active only once someone is
+   * assigned to teach it. (`awaitingTrainer` is defined just below.)
+   */
+  const hasActivePlan =
+    deriveSubscriptionStatus(plan) === "active" &&
+    !(!!plan && isPaid(plan) && (plan as any).training_type === "personal" && !(plan as any).trainer_id);
   const expired     = !!plan && (plan.end_date < todayISO || planEnded);
   const daysToEnd   = plan ? Math.max(0, daysBetween(todayISO, plan.end_date) - 1) : 0;
   const daysSinceRenewal = plan ? Math.max(0, daysBetween(plan.renewal_date, todayISO) - 1) : 0;
-  const expiring    = !!plan && !expired && (daysToEnd <= 3 || sessionsLeft <= 1);
-  const renewUrgent = expiring || expired;
+  /** The plan is under way — its first day has arrived. */
+  const planStarted = !!plan && !!plan.start_date && plan.start_date <= todayISO;
+
+  /**
+   * Renewal urgency means running out. It requires having started.
+   *
+   * `sessionsLeft <= 1` alone was true from the moment a one-session plan was
+   * bought, so a customer who had just paid — and whose first class was still
+   * a day away — was told "final session coming up, renew now". Nothing had
+   * been used yet. Time-based expiry still stands on its own, because a plan
+   * genuinely near its end date is worth flagging however few classes ran.
+   */
+  const expiring    = !!plan && !expired && planStarted &&
+    (daysToEnd <= 3 || (sessionsLeft <= 1 && sessionsUsed > 0));
+  /**
+   * Paid, but nobody is teaching them yet.
+   *
+   * Offline personal training has no batch to join, so the trainer is picked
+   * by an admin after payment. Until that happens the customer is waiting on
+   * us — pressing them to renew in the meantime reads as being asked to pay
+   * twice for a plan that hasn't started, so this state replaces the renewal
+   * nudge entirely.
+   */
+  const awaitingTrainer =
+    !!plan && isPaid(plan) &&
+    // Personal training has no batch to join, online or offline: a trainer is
+    // arranged for this customer specifically, after payment.
+    (plan as any).training_type === "personal" &&
+    !(plan as any).trainer_id &&
+    !expired;
+
+  const renewUrgent = (expiring || expired) && !awaitingTrainer;
   const upiAmount   = renewalPrice;
 
   // UPI deep link — opens the customer's UPI app prefilled with FitVed's VPA,
@@ -287,10 +412,81 @@ export default function Dashboard() {
     baseTotal === 8  ? "Trial plan" :
     `${baseTotal} sessions plan`;
   const upiNote  = `${profile?.name ?? firstName} - renew ${planLabelForNote}`;
-  const upiLink  = `upi://pay?pa=${UPI_VPA}&pn=${encodeURIComponent(UPI_NAME)}&am=${upiAmount}&cu=INR&tn=${encodeURIComponent(upiNote)}`;
+
+  /**
+   * Where "Renew" goes.
+   *
+   * It used to be a `upi://` deep link straight to a fixed VPA — the OS handed
+   * that to whatever claimed the scheme (WhatsApp), and money paid that way
+   * created no order, passed no signature check and activated nothing.
+   * Renewal is a new purchase, so it goes through the normal booking + Razorpay
+   * flow. Deep-links to the same plan when we know which one it was.
+   */
+  // Where the customer already trains. Sourced from their own plan rows, so a
+  // renewal keeps the same society, day pattern, slot and trainer.
+  const { data: assignmentPlans = [] } = useQuery({
+    queryKey: ["plan-assignments", user?.id],
+    enabled: !!user,
+    queryFn: async () => {
+      const { data } = await (supabase as any)
+        .from("plans")
+        .select("training_mode, training_type, society_id, day_set_id, training_days, time_slot, trainer_id, booking_request_id, payment_status, created_at")
+        .eq("user_id", user!.id)
+        .order("created_at", { ascending: false });
+      return data ?? [];
+    },
+  });
+  const assignment = latestAssignment(assignmentPlans as any);
+
+  const [renewing, setRenewing] = useState(false);
+
+  /**
+   * Renew. Nothing to ask — the society, days and slot are unchanged and the
+   * plan is the one they already had — so this opens the gateway directly.
+   * Only if we somehow can't reconstruct the assignment does it fall back to
+   * the booking flow, which asks.
+   */
+  const renewNow = async () => {
+    if (renewing) return;
+    if (!renewOption || !canSkipBooking(assignment, renewOption as any)) { navigate(renewTo); return; }
+    setRenewing(true);
+    try {
+      const r = await repurchase(supabase as any, { userId: user!.id, option: renewOption as any, assignment });
+      if (r.status === "success") {
+        toast.success("Payment received — your plan is active.");
+        await Promise.all([
+          qc.invalidateQueries({ queryKey: ["plan", user!.id] }),
+          qc.invalidateQueries({ queryKey: ["sessions", user!.id] }),
+          qc.invalidateQueries({ queryKey: ["plan-assignments", user!.id] }),
+        ]);
+        return;
+      }
+      if (r.status === "cancelled") toast.info("Payment cancelled. Nothing has been charged.");
+      else if (r.status === "not_eligible" || r.status === "unavailable") navigate(renewTo);
+      else toast.error((r as any).message ?? "Payment failed");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Couldn't start your renewal");
+    } finally {
+      setRenewing(false);
+    }
+  };
+
+  const renewTo = (() => {
+    const opt = (plan as any)?.plan_option_id;
+    if (!opt) return "/plan";
+    const online = (plan as any)?.training_mode === "online";
+    const personal = (plan as any)?.training_type === "personal";
+    if (online) return `/plan/book-online/${opt}`;
+    return personal ? `/plan/book-personal/${opt}` : `/plan/book/${opt}`;
+  })();
 
   const trainingDays: string[] = (plan?.training_days ?? []).map((d: string) => d.slice(0, 3));
   const todayIdx     = getTodayIdx();
+  // The booking flow records the slot/society on the plan; the profile is only
+  // mirrored at activation. Fall back to the plan so nothing renders as "—".
+  const slotLabel = (isOnlineCustomer ? onlineBooking?.preferred_time : (profile?.time_slot ?? (plan as any)?.time_slot)) ?? null;
+  const societyLabel = profile?.society ?? null;
+
   const nextTrainingDay = WEEK_DAYS.find((d, i) => i >= todayIdx && trainingDays.includes(d))
     ?? trainingDays[0]
     ?? null;
@@ -304,8 +500,45 @@ export default function Dashboard() {
   };
 
   // ── Mobile layout ───────────────────────────────────────────────────────────
+  /** Shown while a paid personal plan is waiting on us to assign a trainer. */
+  const AwaitingTrainerCard = ({ compact = false }: { compact?: boolean }) => (
+    <div
+      className={compact ? "mt-4 rounded-xl p-4" : "mx-4 mt-3 rounded-[24px] p-5"}
+      style={{ background: "rgba(240,167,32,0.09)", border: `1px solid ${GOLD}` }}
+    >
+      <div className="flex items-start gap-2.5">
+        <span className="grid place-items-center rounded-xl shrink-0"
+          style={{ width: 32, height: 32, background: "rgba(240,167,32,0.2)" }}>
+          <Clock size={16} color={GOLD_DARK} />
+        </span>
+        <div className="min-w-0">
+          <p className="font-display" style={{ fontSize: 17, color: NAVY }}>
+            Your request has been sent
+          </p>
+          <p style={{ fontSize: 13, color: MUTED, marginTop: 3, lineHeight: 1.5 }}>
+            Payment received. We're assigning your personal trainer — your classes begin the day
+            after they're assigned, so no days are lost while you wait.
+          </p>
+        </div>
+      </div>
+      <a
+        href={supportWhatsAppUrl("Hi FitVed, I've paid for my personal training plan and I'd like an update on my trainer.")}
+        target="_blank" rel="noopener noreferrer"
+        className="mt-3.5 flex items-center justify-center gap-2 rounded-xl font-semibold"
+        style={{ background: NAVY, color: "#fff", fontSize: 14, padding: "11px 0", textDecoration: "none" }}
+      >
+        Chat with support on WhatsApp
+      </a>
+      <p className="text-center" style={{ fontSize: 12, color: MUTED, marginTop: 7 }}>
+        {SUPPORT_WHATSAPP_DISPLAY}
+      </p>
+    </div>
+  );
+
   const MobileLayout = () => (
     <div style={{ background: "#f4f2ee", minHeight: "100%" }}>
+
+      {awaitingTrainer && <AwaitingTrainerCard />}
 
       {/* Renewal urgency card (expiring / expired) */}
       {renewUrgent && plan && (
@@ -328,10 +561,15 @@ export default function Dashboard() {
                 </span>
               </div>
               <h1 className="font-display text-white relative" style={{ fontSize: 23, fontWeight: 600, lineHeight: 1.25 }}>
-                Your momentum is waiting
+                {isPaid(plan) ? "Your momentum is waiting" : "Finish setting up your plan"}
               </h1>
               <p className="text-[13px] leading-relaxed text-white/85 mt-2">
-                {`You completed all ${baseTotal} sessions — real consistency. Pick up right where you left off before the habit fades.`}
+                {/* A plan can end without a single session — an abandoned
+                    checkout, or one stopped early. Claiming they completed
+                    every session would simply be untrue. */}
+                {isPaid(plan)
+                  ? `You completed all ${baseTotal} sessions — real consistency. Pick up right where you left off before the habit fades.`
+                  : "This plan was never activated because the payment didn't go through. Pick it up again whenever you're ready."}
               </p>
             </>
           ) : (
@@ -359,12 +597,12 @@ export default function Dashboard() {
           )}
 
           <a
-            href={upiLink}
-            onClick={(e) => e.stopPropagation()}
+            href={renewTo}
+            onClick={(e) => { e.stopPropagation(); e.preventDefault(); renewNow(); }}
             className="relative w-full flex items-center justify-center gap-1.5 rounded-2xl cursor-pointer"
             style={{ background: GOLD, padding: "13px", marginTop: 16, fontSize: 14, fontWeight: 700, color: GOLD_DARK, textDecoration: "none" }}
           >
-            {expired ? "Renew now" : "Renew & keep it going"} · ₹{upiAmount.toLocaleString("en-IN")}
+            {renewing ? "Opening payment…" : `${expired ? "Renew now" : "Renew & keep it going"} · ₹${upiAmount.toLocaleString("en-IN")}`}
             <ArrowRight size={16} color={GOLD_DARK} />
           </a>
         </div>
@@ -454,6 +692,7 @@ export default function Dashboard() {
             </div>
           )}
           <ClassCalendar
+              showPause={!isOnlineCustomer}
             startDate={calRange?.startDate ?? plan.start_date}
             endDate={calRange?.endDate ?? plan.end_date}
             trainingDays={calRange?.trainingDays ?? plan.training_days ?? []}
@@ -464,6 +703,7 @@ export default function Dashboard() {
             onExpandedChange={setCalExpanded}
             planActive={!!hasActivePlan}
             planRanges={calRange?.ranges}
+            sessions={mySessions}
           />
         </div>
       )}
@@ -482,11 +722,13 @@ export default function Dashboard() {
           </p>
           <p className="font-bold mt-1" style={{ fontSize: 17, color: NAVY }}>
             {nextTrainingDay
-              ? `${nextTrainingDay} · ${profile?.time_slot ?? "—"}`
+              ? (slotLabel ? `${nextTrainingDay} · ${slotLabel}` : nextTrainingDay)
               : "No sessions scheduled"}
           </p>
           <p style={{ fontSize: 12, color: MUTED, marginTop: 2 }}>
-            {trainerName ?? "Your trainer"} · {profile?.society ?? "Your society"}
+            {(isOnlineCustomer ? onlineTrainerName : trainerName) ?? "Your trainer"}
+            {" · "}
+            {isOnlineCustomer ? "Online" : (societyLabel ?? "Society being assigned")}
           </p>
         </div>
           <Link to="/plan">
@@ -512,6 +754,7 @@ export default function Dashboard() {
           </p>
         </button>
 
+        {canPause && (
         <button onClick={() => navigate("/pause")} className="flex-1 rounded-[20px] p-4 text-left border-none cursor-pointer"
           style={{ background: "#fff", border: `1px solid ${BORDER}`, boxShadow: "0 2px 12px rgba(30,58,95,0.05)" }}>
           <div className="flex items-center justify-center rounded-xl mb-2.5"
@@ -521,6 +764,7 @@ export default function Dashboard() {
           <p className="font-bold" style={{ fontSize: 13, color: NAVY }}>Pause</p>
           <p style={{ fontSize: 11, color: MUTED, marginTop: 2 }}>{activePause ? "Paused" : "Running"}</p>
         </button>
+        )}
 
         <button onClick={() => navigate("/profile")} className="flex-1 rounded-[20px] p-4 text-left border-none cursor-pointer"
           style={{ background: "#fff", border: `1px solid ${BORDER}`, boxShadow: "0 2px 12px rgba(30,58,95,0.05)" }}>
@@ -536,7 +780,8 @@ export default function Dashboard() {
       {/* Trainer / Society sections */}
       <div className="px-4 pb-4 space-y-4">
         {role === "trainer" && <TrainerPauses />}
-        {role !== "trainer" && <SocietyBatches />}
+        {/* Society batches are an offline concept. */}
+        {role !== "trainer" && !isOnlineCustomer && <SocietyBatches />}
       </div>
 
       {/* Marketing feed */}
@@ -579,6 +824,7 @@ export default function Dashboard() {
           </div>
           {hasActivePlan ? (
             <>
+              {awaitingTrainer && <AwaitingTrainerCard compact />}
               {renewUrgent && (
                 <div className="mt-4 rounded-xl p-4 flex items-center justify-between gap-3"
                   style={{ background: "rgba(210,59,52,0.08)", border: `1px solid ${RED}` }}>
@@ -590,7 +836,8 @@ export default function Dashboard() {
                       {expired ? "Renew to pick up your momentum where you left off." : "Renew now so you don't break your rhythm."}
                     </p>
                   </div>
-                  <a href={upiLink}
+                  <a href={renewTo}
+                    onClick={(e) => { e.preventDefault(); renewNow(); }}
                     className="inline-flex items-center gap-1.5 rounded-xl shrink-0"
                     style={{ background: GOLD, color: GOLD_DARK, fontWeight: 700, padding: "10px 14px", fontSize: 14, textDecoration: "none" }}>
                     Renew · ₹{upiAmount.toLocaleString("en-IN")} <ArrowRight className="h-4 w-4" />
@@ -604,7 +851,7 @@ export default function Dashboard() {
                 </div>
                 <div className="flex justify-between text-sm">
                   <div>
-                    <p className="text-muted-foreground">Started</p>
+                    <p className="text-muted-foreground">{planStarted ? "Started" : "Starts"}</p>
                     <p className="font-medium">{formatDate(plan.start_date)}</p>
                   </div>
                   <div className="col-span-2">
@@ -633,7 +880,8 @@ export default function Dashboard() {
                     Renew now to continue your fitness journey and get back on track.
                   </p>
                 </div>
-                <a href={upiLink}
+                <a href={renewTo}
+                  onClick={(e) => { e.preventDefault(); renewNow(); }}
                   className="inline-flex items-center gap-1.5 rounded-xl shrink-0"
                   style={{ background: GOLD, color: GOLD_DARK, fontWeight: 700, padding: "10px 14px", fontSize: 14, textDecoration: "none" }}>
                   Renew · ₹{upiAmount.toLocaleString("en-IN")} <ArrowRight className="h-4 w-4" />
@@ -648,7 +896,8 @@ export default function Dashboard() {
           )}
         </Card>
 
-        {/* Pause card */}
+        {/* Pause is a group-training benefit — see useCanPauseClasses. */}
+        {canPause && (
         <Card className="p-6 rounded-2xl shadow-card hover:shadow-elevated transition-shadow">
           <div className="flex items-center gap-3">
             <span className="grid h-10 w-10 place-items-center rounded-xl bg-accent text-accent-foreground">
@@ -672,6 +921,7 @@ export default function Dashboard() {
             </Button>
           )}
         </Card>
+        )}
 
         {/* My classes calendar — includes trainer off-day indicators */}
         {plan && (
@@ -689,6 +939,7 @@ export default function Dashboard() {
               </div>
             )}
             <ClassCalendar
+              showPause={!isOnlineCustomer}
               startDate={calRange?.startDate ?? plan.start_date}
               endDate={calRange?.endDate ?? plan.end_date}
               trainingDays={calRange?.trainingDays ?? plan.training_days ?? []}
@@ -699,6 +950,7 @@ export default function Dashboard() {
               onExpandedChange={setCalExpanded}
               planActive={!!hasActivePlan}
               planRanges={calRange?.ranges}
+              sessions={mySessions}
             />
           </Card>
         )}
@@ -764,7 +1016,7 @@ export default function Dashboard() {
         {role === "trainer" && (
           <div className="md:col-span-2"><TrainerPauses /></div>
         )}
-        {role !== "trainer" && (
+        {role !== "trainer" && !isOnlineCustomer && (
           <div className="md:col-span-2"><SocietyBatches /></div>
         )}
 
@@ -777,6 +1029,12 @@ export default function Dashboard() {
     <>
       {/* First-time class-mode selection (Online/Offline) for new clients. */}
       <ClassModeGate />
+      {/* Today's live session — online customers only. */}
+      {isOnlineCustomer && (
+        <div className="px-4 pt-2 md:px-0 md:pt-0 md:pb-4">
+          <OnlineSessionCard />
+        </div>
+      )}
       {/* Existing customers pre-date the email step — offer to add one.
           Rendered once above both layouts so the link-completion effect
           only ever runs a single time. Clients only. */}

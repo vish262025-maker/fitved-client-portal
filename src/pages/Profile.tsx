@@ -16,6 +16,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import TrainerProfile from "./TrainerProfile";
 import { ClassModeCard } from "@/components/dashboard/ClassModeCard";
+import { useIsOnlineCustomer } from "@/hooks/useIsOnlineCustomer";
+import { deriveSubscriptionStatus, isPaid } from "@/lib/subscription";
 
 const GOLD       = "#f0a720";
 const GOLD_LIGHT = "#fef3d0";
@@ -34,6 +36,8 @@ export default function Profile() {
   const [society, setSociety]   = useState("");
   const [societyId, setSocietyId] = useState("");
   const [timeSlot, setTimeSlot] = useState("");
+  // Society/time-slot are offline concepts; online customers train from home.
+  const { isOnline: isOnlineCustomer } = useIsOnlineCustomer();
 
   // profiles.trainer_id references trainers.id — look the name up there.
   const { data: trainer } = useQuery({
@@ -42,6 +46,63 @@ export default function Profile() {
     queryFn: async () => {
       const { data } = await supabase.from("trainers").select("name").eq("id", profile!.trainer_id!).maybeSingle();
       return data;
+    },
+  });
+
+  /**
+   * An online customer's trainer and schedule.
+   *
+   * This read `booking_requests` only. That table belongs to the older
+   * self-service flow; buying through the payment gateway creates a `plans`
+   * row carrying the batch and writes no booking — so a customer who had paid,
+   * been placed in a batch and had a trainer still saw "Schedule —" and
+   * "Trainer: Not assigned". The subscription is the source of truth, so the
+   * batch on it answers first; a booking row is the fallback for customers
+   * who came through the older flow.
+   */
+  const { data: onlineBooking } = useQuery({
+    queryKey: ["profile-online-booking", user?.id],
+    enabled: !!user && isOnlineCustomer,
+    queryFn: async () => {
+      const { data: plan } = await (supabase as any)
+        .from("plans")
+        .select("batch_id, trainer_id, payment_status, status, created_at")
+        .eq("user_id", user!.id).eq("training_mode", "online")
+        .order("created_at", { ascending: false });
+      // Never bought = nothing to show.
+      const live = ((plan ?? []) as any[]).find(
+        (p) => p.payment_status == null || p.payment_status === "success",
+      );
+      if (live?.batch_id) {
+        const { data: b } = await (supabase as any)
+          .from("online_batches").select("trainer_id, start_time, end_time")
+          .eq("id", live.batch_id).maybeSingle();
+        if (b) {
+          return {
+            trainer_id: live.trainer_id ?? b.trainer_id ?? null,
+            preferred_time: b.start_time && b.end_time ? `${b.start_time} – ${b.end_time}` : null,
+            training_type: null,
+          };
+        }
+      }
+
+      const { data } = await (supabase as any)
+        .from("booking_requests")
+        .select("trainer_id, preferred_time, training_type")
+        .eq("user_id", user!.id).eq("training_mode", "online")
+        .in("status", ["pending_trainer_assignment", "trainer_assigned", "training_ongoing"])
+        .order("created_at", { ascending: false }).limit(1).maybeSingle();
+      return data ?? null;
+    },
+  });
+
+  const { data: onlineTrainer } = useQuery({
+    queryKey: ["profile-online-trainer", onlineBooking?.trainer_id],
+    enabled: !!onlineBooking?.trainer_id,
+    queryFn: async () => {
+      const { data } = await (supabase as any)
+        .from("trainers").select("name").eq("id", onlineBooking.trainer_id).maybeSingle();
+      return data ?? null;
     },
   });
 
@@ -70,7 +131,7 @@ export default function Profile() {
     },
   });
 
-  const hasActivePlan = activePlan?.status === "active";
+  const hasActivePlan = deriveSubscriptionStatus(activePlan) === "active";
 
   // Trainers get their own profile view (no society/plan/trainer fields)
   if (role === "trainer") return <TrainerProfile />;
@@ -113,9 +174,13 @@ export default function Profile() {
   const trainerInitials = (trainer?.name ?? "").split(" ").map((p) => p[0]).slice(0, 2).join("").toUpperCase();
 
   const infoRows = [
-    { icon: MapPin,    label: "Society",   value: profile?.society   || "—" },
-    { icon: Clock,     label: "Time slot", value: profile?.time_slot || "—" },
-    { icon: UserRound, label: "Trainer",   value: trainer?.name      || "Not assigned" },
+    ...(isOnlineCustomer
+      ? [{ icon: Clock, label: "Schedule", value: onlineBooking?.preferred_time || profile?.time_slot || "—" }]
+      : [
+          { icon: MapPin, label: "Society",   value: profile?.society   || "—" },
+          { icon: Clock,  label: "Time slot", value: profile?.time_slot || "—" },
+        ]),
+    { icon: UserRound, label: "Trainer",   value: (isOnlineCustomer ? (onlineTrainer?.name ?? trainer?.name) : trainer?.name) || "Not assigned" },
     { icon: Phone,     label: "Phone",     value: profile?.phone     || "—" },
     { icon: Mail,      label: "Email",     value: (profile as any)?.email || "—" },
   ];
