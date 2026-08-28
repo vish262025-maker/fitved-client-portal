@@ -98,10 +98,14 @@ export function PlanOptionsList({ userId, customerName, customerPhone }: Props) 
   const { data: allOptions = [] } = useQuery({
     queryKey: ["plan-options"],
     queryFn: async () => {
-      // Explicit columns (not "*") so the category fields are always present.
+      // NOTE: every consumer of ["plan-options"] must fetch the SAME columns.
+      // React Query caches by key, so a narrower select landing first leaves
+      // the other screens reading rows with fields missing — which is exactly
+      // how the plan cards lost their name, badge and per-month price when
+      // navigating from the dashboard instead of loading /plan directly.
       const { data } = await (supabase as any)
         .from("plan_options")
-        .select("id, name, duration_months, price, total_sessions, badge, sort_order, training_type, class_mode")
+        .select("*")
         .eq("active", true)
         .order("sort_order").order("duration_months");
       return (data ?? []) as Option[];

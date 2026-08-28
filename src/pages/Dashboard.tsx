@@ -221,10 +221,19 @@ export default function Dashboard() {
   const { data: planOptions = [] } = useQuery({
     queryKey: ["plan-options"],
     queryFn: async () => {
+      // NOTE: every consumer of ["plan-options"] must fetch the SAME columns.
+      // React Query caches by key, so a narrower select landing first leaves
+      // the other screens reading rows with fields missing — which is exactly
+      // how the plan cards lost their name, badge and per-month price when
+      // navigating from the dashboard instead of loading /plan directly.
       // `as any`: the generated types predate the category columns, which
       // exist in the live database.
       const { data } = await (supabase as any)
-        .from("plan_options").select("id,price,total_sessions,class_mode,training_type").eq("active", true);
+        .from("plan_options").select("*").eq("active", true)
+        // Same ordering as the other consumers — a shared cache key must mean
+        // a shared result, order included, or the cards come out shuffled
+        // depending on which screen loaded first.
+        .order("sort_order").order("duration_months");
       return (data ?? []) as { id: string; price: number; total_sessions: number;
         class_mode: string | null; training_type: string | null }[];
     },

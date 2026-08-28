@@ -107,6 +107,10 @@ export default function Profile() {
   });
 
   // Fetch societies list for dropdown
+  // Online training happens over a video call — there is no society, so the
+  // field is not merely empty for those customers, it does not apply.
+  const showSociety = !isOnlineCustomer;
+
   const { data: societiesList = [] } = useQuery({
     queryKey: ["profile-societies-list"],
     queryFn: async () => {
@@ -153,14 +157,11 @@ export default function Profile() {
         .update({ name, phone }).eq("id", user.id);
       if (error) { toast.error(error.message); return; }
     } else {
-      // Clients can only change email and society — name, phone and time slot
-      // are managed by the admin (and trainers never reach this page).
+      // A client may change only their email. Society, time slot, trainer and
+      // name all follow from the plan they bought and the admin's assignment,
+      // so the form no longer offers them and the write no longer sends them.
       const { error } = await supabase.from("profiles")
-        .update({
-          email: email || null,
-          society: society || null,
-          society_id: societyId || null,
-        })
+        .update({ email: email || null })
         .eq("id", user.id);
       if (error) { toast.error(error.message); return; }
     }
@@ -266,31 +267,17 @@ export default function Profile() {
                     <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="your@email.com" />
                     <p className="text-[11px] text-muted-foreground">Visible to your trainer and admin.</p>
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="society">Society</Label>
-                    <select
-                      id="society"
-                      value={societyId}
-                      disabled={hasActivePlan && role === "client"}
-                      onChange={(e) => {
-                        const selId = e.target.value;
-                        setSocietyId(selId);
-                        const selName = societiesList.find(s => s.id === selId)?.name ?? "";
-                        setSociety(selName);
-                      }}
-                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      <option value="">Select a society</option>
-                      {societiesList.map((s) => (
-                        <option key={s.id} value={s.id}>
-                          {s.name}
-                        </option>
-                      ))}
-                    </select>
-                    {hasActivePlan && role === "client" && (
-                      <p className="text-[11px] text-destructive">Society cannot be changed during an active subscription.</p>
-                    )}
-                  </div>
+                  {/* Society is not the customer's to choose: it comes from the
+                      plan they buy and the admin's assignment. Online training
+                      has no society at all, so the field is absent there
+                      entirely rather than shown empty. */}
+                  {showSociety && (
+                    <div className="space-y-2">
+                      <Label>Society</Label>
+                      <Input value={profile?.society ?? "Set when your plan starts"} disabled />
+                      <p className="text-[11px] text-muted-foreground">Set by your plan — ask your admin to change it.</p>
+                    </div>
+                  )}
                   <div className="space-y-2">
                     <Label htmlFor="time">Time slot</Label>
                     <Input id="time" value={timeSlot} disabled={role === "client"} onChange={(e) => setTimeSlot(e.target.value)} placeholder="e.g. 7:30 – 8:30 AM" />
@@ -353,31 +340,13 @@ export default function Profile() {
                   <Input id="email-d" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="your@email.com" />
                   <p className="text-[11px] text-muted-foreground">Visible to your trainer and admin.</p>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="society-d">Society</Label>
-                  <select
-                    id="society-d"
-                    value={societyId}
-                    disabled={hasActivePlan && role === "client"}
-                    onChange={(e) => {
-                      const selId = e.target.value;
-                      setSocietyId(selId);
-                      const selName = societiesList.find(s => s.id === selId)?.name ?? "";
-                      setSociety(selName);
-                    }}
-                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    <option value="">Select a society</option>
-                    {societiesList.map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.name}
-                      </option>
-                    ))}
-                  </select>
-                  {hasActivePlan && role === "client" && (
-                    <p className="text-[11px] text-destructive">Society cannot be changed during an active subscription.</p>
-                  )}
-                </div>
+                {showSociety && (
+                  <div className="space-y-2">
+                    <Label>Society</Label>
+                    <Input value={profile?.society ?? "Set when your plan starts"} disabled />
+                    <p className="text-[11px] text-muted-foreground">Set by your plan — ask your admin to change it.</p>
+                  </div>
+                )}
                 <div className="space-y-2">
                   <Label htmlFor="time-d">Time slot</Label>
                   <Input id="time-d" value={timeSlot} disabled={role === "client"} onChange={(e) => setTimeSlot(e.target.value)} placeholder="e.g. 7:30 – 8:30 AM" />
