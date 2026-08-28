@@ -35,7 +35,7 @@ export function useCanPauseClasses() {
         (supabase as any).from("profiles").select("class_mode").eq("id", user!.id).maybeSingle(),
         (supabase as any)
           .from("plans")
-          .select("training_mode, training_type, payment_status, created_at")
+          .select("training_mode, training_type, payment_status, status, created_at")
           .eq("user_id", user!.id)
           .order("created_at", { ascending: false }),
       ]);
@@ -48,6 +48,10 @@ export function useCanPauseClasses() {
       const current = paid[0] ?? null;
 
       return {
+        // Pausing needs something to pause. Without a running plan the option
+        // was still offered, and "Pause status: Active" was shown to someone
+        // who had never bought a class.
+        hasActivePlan: !!current && current.status === "active",
         classMode: (prof?.class_mode ?? null) as "online" | "offline" | null,
         trainingMode: (current?.training_mode ?? null) as string | null,
         trainingType: (current?.training_type ?? null) as string | null,
@@ -57,7 +61,7 @@ export function useCanPauseClasses() {
 
   const isPersonal = data?.trainingType === "personal";
 
-  const canPause = role === "client" && !isLoading && !!data && !isPersonal;
+  const canPause = role === "client" && !isLoading && !!data && !isPersonal && !!data.hasActivePlan;
 
   return {
     canPause,

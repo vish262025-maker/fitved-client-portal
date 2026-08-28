@@ -13,7 +13,11 @@ import { supabase } from "@/integrations/supabase/client";
  * date and a price belonging to a plan they never bought, while the plan they
  * were actually training on sat right there in the database.
  *
- * A never-paid row is only the answer when there is no purchase to show.
+ * An unpaid row is NOT a fallback. A customer who has never bought anything
+ * has no plan — showing them the shell of an abandoned checkout told someone
+ * who had never paid that their plan "was never activated", offered to renew
+ * it, and said it had been stopped. They have no plan; the dashboard should
+ * invite them to choose one.
  */
 export function useCurrentPlan(userId: string | undefined) {
   return useQuery({
@@ -25,10 +29,9 @@ export function useCurrentPlan(userId: string | undefined) {
         .order("created_at", { ascending: false });
       const rows = data ?? [];
       // NULL payment_status = collected outside the app, which counts as paid.
-      const paid = rows.find(
+      return rows.find(
         (p: any) => p.payment_status == null || p.payment_status === "success",
-      );
-      return paid ?? rows[0] ?? null;
+      ) ?? null;
     },
   });
 }

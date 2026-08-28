@@ -20,6 +20,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { SPECIALIZATIONS } from "@/lib/specializations";
 import { CITIES, areasForCity } from "@/lib/cities";
 import { buildTrainerSlug } from "@/lib/trainerSlug";
+import { shrinkImage } from "@/lib/imageUpload";
 
 const LANGUAGES = [
   "English", "Hindi", "Kannada", "Tamil", "Telugu", "Malayalam", "Marathi",
@@ -339,7 +340,7 @@ export default function TrainerProfileForm({
       }
       if (photoFile) {
         const p = `photos/${trainerId}/${Date.now()}-${sanitize(photoFile.name)}`;
-        const { error } = await supabase.storage.from(BUCKET).upload(p, photoFile, { upsert: true });
+        const { error } = await supabase.storage.from(BUCKET).upload(p, await shrinkImage(photoFile), { upsert: true, cacheControl: "31536000" });
         if (error) throw error;
         nextPhoto = p;
       }
@@ -348,7 +349,7 @@ export default function TrainerProfileForm({
       let nextCv = cvPath;
       if (cvFile) {
         const p = `cv/${trainerId}/${Date.now()}-${sanitize(cvFile.name)}`;
-        const { error } = await supabase.storage.from(BUCKET).upload(p, cvFile, { upsert: true });
+        const { error } = await supabase.storage.from(BUCKET).upload(p, cvFile, { upsert: true, cacheControl: "31536000" });
         if (error) throw error;
         nextCv = p;
       }
@@ -357,7 +358,7 @@ export default function TrainerProfileForm({
       const certRows: { trainer_id: string; file_path: string; file_name: string; mime_type: string }[] = [];
       for (const f of newCerts) {
         const p = `certificates/${trainerId}/${Date.now()}-${sanitize(f.name)}`;
-        const { error } = await supabase.storage.from(BUCKET).upload(p, f);
+        const { error } = await supabase.storage.from(BUCKET).upload(p, f, { cacheControl: "31536000" });
         if (error) throw error;
         certRows.push({ trainer_id: trainerId, file_path: p, file_name: f.name, mime_type: f.type });
       }

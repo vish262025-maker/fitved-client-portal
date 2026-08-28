@@ -881,7 +881,7 @@ export default function Dashboard() {
               </Button>
             </>
           ) : (
-            <p className="mt-5 text-sm text-muted-foreground">No plan assigned yet — your trainer will set this up.</p>
+            <p className="mt-5 text-sm text-muted-foreground">No plan yet — pick one on the Plan tab to get started.</p>
           )}
         </Card>
 
@@ -986,7 +986,7 @@ export default function Dashboard() {
           <ul className="mt-5 space-y-3 text-sm">
             <li className="flex items-start gap-3">
               <MapPin className="h-4 w-4 mt-0.5 text-muted-foreground" />
-              <span>{profile?.society || "Add your society in Profile"}</span>
+              <span>{profile?.society || "Society comes with your plan"}</span>
             </li>
             <li className="flex items-start gap-3">
               <Clock className="h-4 w-4 mt-0.5 text-muted-foreground" />

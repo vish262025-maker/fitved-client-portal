@@ -120,7 +120,7 @@ export default function BuyOnlinePlan() {
 
   // An existing online subscription — purchases are additive, never overwriting.
   const currentQ = useQuery({
-    queryKey: ["my-subscription", user?.id],
+    queryKey: ["active-online-subscription", user?.id],
     enabled: !!user,
     queryFn: async () => {
       const { data } = await (supabase as any)
@@ -181,7 +181,7 @@ export default function BuyOnlinePlan() {
       if (paid.status === "success") {
         toast.success("Payment received — your plan is active.");
         await Promise.all([
-          qc.invalidateQueries({ queryKey: ["my-subscription", user.id] }),
+          qc.invalidateQueries({ queryKey: ["active-online-subscription", user.id] }),
           qc.invalidateQueries({ queryKey: ["plan", user.id] }),
           qc.invalidateQueries({ queryKey: ["online-sessions", user.id] }),
         ]);

@@ -15,6 +15,7 @@ import { toast } from "sonner";
 import { formatDate } from "@/lib/dates";
 import { useAuth } from "@/contexts/AuthContext";
 import { scopeByAdmin } from "@/lib/adminScope";
+import { shrinkImage } from "@/lib/imageUpload";
 
 interface Post {
   id: string;
@@ -63,7 +64,8 @@ export default function Marketing() {
       if (ctaLabel !== "none" && !ctaUrl.trim()) throw new Error("Add the link the button should open");
 
       const path = `${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.-]/g, "_")}`;
-      const { error: upErr } = await supabase.storage.from("marketing").upload(path, file);
+      const upload = await shrinkImage(file);
+      const { error: upErr } = await supabase.storage.from("marketing").upload(path, upload, { cacheControl: "31536000" });
       if (upErr) throw upErr;
 
       const payload: Record<string, unknown> = {

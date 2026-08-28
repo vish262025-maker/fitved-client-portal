@@ -5,6 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Loader2, Plus, X, Video as VideoIcon, ImagePlus } from "lucide-react";
+import { shrinkImage } from "@/lib/imageUpload";
 
 const BUCKET = "trainer-assets";
 const IMAGE_LIMIT = 20;
@@ -55,7 +56,7 @@ export default function TrainerMediaSection({ trainerId }: { trainerId: string }
         const okType = video ? f.type.startsWith("video") : f.type.startsWith("image");
         if (!okType) { toast.error(`${f.name}: wrong file type for ${video ? "video" : "image"}`); continue; }
         const path = `media/${trainerId}/${Date.now()}-${sanitize(f.name)}`;
-        const up = await supabase.storage.from(BUCKET).upload(path, f);
+        const up = await supabase.storage.from(BUCKET).upload(path, await shrinkImage(f), { cacheControl: "31536000" });
         if (up.error) throw up.error;
         const ins = await sb.from("trainer_media").insert({ trainer_id: trainerId, kind, file_path: path });
         if (ins.error) throw ins.error;

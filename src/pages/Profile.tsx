@@ -18,6 +18,7 @@ import TrainerProfile from "./TrainerProfile";
 import { ClassModeCard } from "@/components/dashboard/ClassModeCard";
 import { useIsOnlineCustomer } from "@/hooks/useIsOnlineCustomer";
 import { deriveSubscriptionStatus, isPaid } from "@/lib/subscription";
+import { useCurrentPlan } from "@/hooks/useCurrentPlan";
 
 const GOLD       = "#f0a720";
 const GOLD_LIGHT = "#fef3d0";
@@ -120,20 +121,8 @@ export default function Profile() {
   });
 
   // Fetch active plan to restrict society changes
-  const { data: activePlan } = useQuery({
-    queryKey: ["profile-active-plan", user?.id],
-    enabled: !!user && role === "client",
-    queryFn: async () => {
-      const { data } = await supabase
-        .from("plans")
-        .select("status, end_date")
-        .eq("user_id", user!.id)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      return data;
-    },
-  });
+  // One definition of "your plan" — an abandoned checkout is not one.
+  const { data: activePlan } = useCurrentPlan(user?.id);
 
   const hasActivePlan = deriveSubscriptionStatus(activePlan) === "active";
 

@@ -33,7 +33,7 @@ export function HealthTab({ userId }: { userId: string }) {
       const contentType =
         file.type || (/\.html?$/i.test(file.name) ? "text/html" : "application/pdf");
       const { error: upErr } = await supabase.storage
-        .from("health-reports").upload(path, file, { contentType });
+        .from("health-reports").upload(path, file, { contentType, cacheControl: "3600" });
       if (upErr) throw upErr;
       const { error } = await supabase.from("health_reports").insert({
         client_id: userId, title, report_date: date, file_path: path,

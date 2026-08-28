@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Loader2, Plus, X, Star, Quote } from "lucide-react";
+import { shrinkImage } from "@/lib/imageUpload";
 
 const BUCKET = "trainer-assets";
 const sanitize = (n: string) => n.replace(/[^a-zA-Z0-9.-]/g, "_");
@@ -58,7 +59,7 @@ export default function TrainerTestimonialsSection({ trainerId }: { trainerId: s
         const f = imgs[slot.key];
         if (f) {
           const path = `testimonials/${trainerId}/${Date.now()}-${sanitize(f.name)}`;
-          const up = await supabase.storage.from(BUCKET).upload(path, f);
+          const up = await supabase.storage.from(BUCKET).upload(path, await shrinkImage(f), { cacheControl: "31536000" });
           if (up.error) throw up.error;
           payload[slot.key] = path;
         }

@@ -17,6 +17,7 @@ import { useCanPauseClasses } from "@/hooks/useCanPauseClasses";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { deriveSubscriptionStatus, isPaid } from "@/lib/subscription";
+import { useCurrentPlan } from "@/hooks/useCurrentPlan";
 
 // Count how many of the client's training days fall within [from, to] inclusive
 function countSessionsInRange(from: Date, to: Date, trainingDays: string[]): number {
@@ -78,20 +79,7 @@ export default function Pause() {
     ? daysBetween(range.from.toISOString(), range.to.toISOString()) : 0;
 
   // Fetch user's active plan info
-  const { data: activePlan } = useQuery({
-    queryKey: ["pause-active-plan-info", user?.id],
-    enabled: !!user,
-    queryFn: async () => {
-      const { data } = await supabase
-        .from("plans")
-        .select("training_days, total_sessions, status")
-        .eq("user_id", user!.id)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      return data;
-    },
-  });
+  const { data: activePlan } = useCurrentPlan(user?.id);
 
   const trainingDays = (activePlan?.training_days ?? []) as string[];
   const totalSessions = activePlan?.total_sessions ?? 0;

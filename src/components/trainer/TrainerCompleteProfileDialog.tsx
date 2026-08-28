@@ -13,6 +13,7 @@ import { SPECIALIZATIONS } from "@/lib/specializations";
 import {
   Loader2, ArrowRight, ArrowLeft, Check, ImageIcon, Wifi, Home, MapPin, X,
 } from "lucide-react";
+import { shrinkImage } from "@/lib/imageUpload";
 
 const BUCKET = "trainer-assets";
 const NAVY = "#1E3A5F";
@@ -248,7 +249,7 @@ export default function TrainerCompleteProfileDialog({
       let nextPhoto = photoPath;
       if (photoFile) {
         const p = `photos/${trainerId}/${Date.now()}-${sanitize(photoFile.name)}`;
-        const { error } = await supabase.storage.from(BUCKET).upload(p, photoFile, { upsert: true });
+        const { error } = await supabase.storage.from(BUCKET).upload(p, await shrinkImage(photoFile), { upsert: true, cacheControl: "31536000" });
         if (error) throw error;
         nextPhoto = p;
       }

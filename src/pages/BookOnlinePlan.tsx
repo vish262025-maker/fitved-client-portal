@@ -125,10 +125,13 @@ export default function BookOnlinePlan() {
   const latest = existingQ.data as BookingRequest | null;
   const existing = latest && OPEN_STATUSES.includes(latest.status) ? latest : null;
 
-  // The subscription behind this booking — used to offer "Complete payment"
-  // when a customer cancelled the Razorpay window and came back.
+  // The subscription behind this booking — deliberately the newest row of any
+  // kind, because the point is to let someone finish a checkout they
+  // abandoned. Its own key: BuyOnlinePlan asks a different question of the
+  // same table, and one key answering two questions is how the dashboard
+  // ended up showing an abandoned checkout as somebody's plan.
   const subQ = useQuery({
-    queryKey: ["my-subscription", user?.id],
+    queryKey: ["pending-subscription", user?.id],
     enabled: !!user,
     queryFn: async () => {
       const { data } = await supabase
@@ -304,7 +307,7 @@ export default function BookOnlinePlan() {
             <Row icon={Clock}>Status: <strong>{STATUS_LABEL[existing.status] ?? existing.status}</strong></Row>
           </ul>
           <PaymentLine plan={subQ.data} onPaid={() => {
-            qc.invalidateQueries({ queryKey: ["my-subscription", user?.id] });
+            qc.invalidateQueries({ queryKey: ["pending-subscription", user?.id] });
             qc.invalidateQueries({ queryKey: ["plan", user?.id] });
           }} />
         </div>
