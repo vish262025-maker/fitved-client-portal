@@ -1,6 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
-import { SUPABASE_URL, SERVICE_ROLE_KEY } from "./env";
-import { subscriptionTerm } from "./term";
+import { SUPABASE_URL, SERVICE_ROLE_KEY } from "./env.js";
+import { subscriptionTerm } from "./term.js";
 
 /**
  * Service-role client. This is the only identity allowed to mark a

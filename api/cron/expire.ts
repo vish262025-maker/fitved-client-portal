@@ -1,6 +1,6 @@
-import { dbReady } from "../_lib/env";
-import { admin } from "../_lib/db";
-import { json } from "../_lib/http";
+import { dbReady } from "../_lib/env.js";
+import { admin } from "../_lib/db.js";
+import { json } from "../_lib/http.js";
 
 /**
  * GET /api/cron/expire — runs nightly from vercel.json "crons".

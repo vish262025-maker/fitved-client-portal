@@ -1,7 +1,7 @@
-import { gatewayReady, missingConfig, RZP_KEY_ID } from "../_lib/env";
-import { createOrder } from "../_lib/razorpay";
-import { admin } from "../_lib/db";
-import { json, methodOnly } from "../_lib/http";
+import { gatewayReady, missingConfig, RZP_KEY_ID } from "../_lib/env.js";
+import { createOrder } from "../_lib/razorpay.js";
+import { admin } from "../_lib/db.js";
+import { json, methodOnly } from "../_lib/http.js";
 
 /**
  * POST /api/payments/create-order   { plan_id }

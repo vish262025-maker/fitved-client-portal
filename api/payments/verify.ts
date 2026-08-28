@@ -1,7 +1,7 @@
-import { gatewayReady } from "../_lib/env";
-import { verifyCheckoutSignature, fetchPayment } from "../_lib/razorpay";
-import { admin, activateFromOrder, markPaymentFailed } from "../_lib/db";
-import { json, methodOnly } from "../_lib/http";
+import { gatewayReady } from "../_lib/env.js";
+import { verifyCheckoutSignature, fetchPayment } from "../_lib/razorpay.js";
+import { admin, activateFromOrder, markPaymentFailed } from "../_lib/db.js";
+import { json, methodOnly } from "../_lib/http.js";
 
 /**
  * POST /api/payments/verify

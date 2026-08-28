@@ -1,7 +1,7 @@
-import { RZP_WEBHOOK_SECRET, gatewayReady } from "../_lib/env";
-import { verifyWebhookSignature } from "../_lib/razorpay";
-import { admin, activateFromOrder, markPaymentFailed } from "../_lib/db";
-import { json, rawBody } from "../_lib/http";
+import { RZP_WEBHOOK_SECRET, gatewayReady } from "../_lib/env.js";
+import { verifyWebhookSignature } from "../_lib/razorpay.js";
+import { admin, activateFromOrder, markPaymentFailed } from "../_lib/db.js";
+import { json, rawBody } from "../_lib/http.js";
 
 // Razorpay signs the raw bytes, so the platform must not parse them for us.
 export const config = { api: { bodyParser: false } };

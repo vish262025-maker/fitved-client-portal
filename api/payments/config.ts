@@ -1,5 +1,5 @@
-import { gatewayReady } from "../_lib/env";
-import { json } from "../_lib/http";
+import { gatewayReady } from "../_lib/env.js";
+import { json } from "../_lib/http.js";
 
 /**
  * GET /api/payments/config → { enabled }

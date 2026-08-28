@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import { RZP_KEY_ID, RZP_KEY_SECRET } from "./env";
+import { RZP_KEY_ID, RZP_KEY_SECRET } from "./env.js";
 
 const API = "https://api.razorpay.com/v1";
 
