@@ -56,7 +56,9 @@ export default function OnlineCustomers() {
        * shape, and a real booking row still wins where one exists.
        */
       const { data: myProfiles } = await (supabase as any)
-        .from("profiles").select("id").eq("assigned_admin_id", adminId);
+        .from("profiles")
+        .select("id, name, phone, class_mode, created_at")
+        .eq("assigned_admin_id", adminId);
       const myIds = ((myProfiles ?? []) as any[]).map((p) => p.id);
       const { data: onlinePlans } = myIds.length
         ? await (supabase as any)
@@ -124,6 +126,35 @@ export default function OnlineCustomers() {
           : Promise.resolve({ data: [] }),
       ]);
 
+      /**
+       * Online customers who have not bought anything yet.
+       *
+       * The roster is built from paid plans, and the offline book excludes
+       * anyone training online — so someone who signed up for online training
+       * and has not purchased was in neither place, and no admin could see
+       * they existed. They are listed here, plainly, as people to follow up.
+       */
+      const { data: clientRoles } = await (supabase as any)
+        .from("user_roles").select("user_id").eq("role", "client");
+      const clientIds = new Set(((clientRoles ?? []) as any[]).map((r) => r.user_id));
+      const everBought = new Set(
+        ((onlinePlans ?? []) as any[])
+          .filter((p) => p.payment_status == null || p.payment_status === "success")
+          .map((p) => p.user_id),
+      );
+      const { data: anyPaidPlan } = myIds.length
+        ? await (supabase as any).from("plans").select("user_id, payment_status").in("user_id", myIds)
+        : { data: [] };
+      const boughtAnything = new Set(
+        ((anyPaidPlan ?? []) as any[])
+          .filter((p) => p.payment_status == null || p.payment_status === "success")
+          .map((p) => p.user_id),
+      );
+      const unsubscribed = ((myProfiles ?? []) as any[])
+        .filter((p) => clientIds.has(p.id))
+        .filter((p) => p.class_mode === "online")
+        .filter((p) => !everBought.has(p.id) && !boughtAnything.has(p.id));
+
       const liveIds = new Set(((profs ?? []) as any[]).map((p) => p.id));
       const reqs = reqsRaw.filter((r) => liveIds.has(r.user_id));
 
@@ -134,7 +165,7 @@ export default function OnlineCustomers() {
       }
 
       return {
-        reqs, batches,
+        reqs, batches, unsubscribed,
         people: Object.fromEntries(((profs ?? []) as any[]).map((p) => [p.id, p])),
         plans: Object.fromEntries(((plans ?? []) as any[]).map((p) => [p.id, p])),
         trainers: Object.fromEntries(((trainers ?? []) as any[]).map((t) => [t.id, t])),
@@ -147,6 +178,7 @@ export default function OnlineCustomers() {
   const reqs: BookingRequest[] = (q.data as any)?.reqs ?? [];
   const allBatches: OnlineBatch[] = (q.data as any)?.batches ?? [];
   const people: Record<string, any> = (q.data as any)?.people ?? {};
+  const unsubscribed: any[] = (q.data as any)?.unsubscribed ?? [];
   const plans: Record<string, any> = (q.data as any)?.plans ?? {};
   const trainers: Record<string, any> = (q.data as any)?.trainers ?? {};
   const subs: Record<string, any> = (q.data as any)?.subs ?? {};
@@ -381,6 +413,43 @@ export default function OnlineCustomers() {
 
           <PersonalSection />
           <Section title="Group training" icon={Users} type="group" />
+
+          {/* Signed up for online training, nothing bought yet. Not a batch and
+              not a client — but a real person who is otherwise invisible. */}
+          {unsubscribed.length > 0 && (
+            <section className="rounded-2xl border border-dashed border-border bg-card">
+              <div className="flex items-center gap-2 border-b border-border p-4">
+                <UserRound className="h-5 w-5 text-muted-foreground" />
+                <h2 className="font-display text-xl text-foreground">No plan yet</h2>
+                <span className="text-sm text-muted-foreground">
+                  ({unsubscribed.length} {unsubscribed.length === 1 ? "person" : "people"})
+                </span>
+              </div>
+              <p className="px-4 pt-3 text-sm text-muted-foreground">
+                Signed up for online training but hasn't bought a plan.
+              </p>
+              <ul className="p-4 pt-2">
+                {unsubscribed.map((u) => (
+                  <li key={u.id} className="flex flex-wrap items-center justify-between gap-3 border-b border-border py-3 last:border-b-0">
+                    <div className="min-w-0">
+                      <p className="font-medium">{u.name ?? "Customer"}</p>
+                      <p className="text-sm text-muted-foreground">
+                        {u.phone ?? "No phone"}
+                        {u.created_at ? ` · joined ${String(u.created_at).slice(0, 10)}` : ""}
+                      </p>
+                    </div>
+                    {u.phone && (
+                      <a href={`tel:${u.phone}`}
+                        className="shrink-0 text-sm font-semibold text-primary"
+                        style={{ textDecoration: "none" }}>
+                        Call
+                      </a>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
         </>
       )}
 
