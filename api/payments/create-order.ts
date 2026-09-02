@@ -45,59 +45,50 @@ export default async function handler(req: any, res: any) {
   if (!plan.plan_option_id) return json(res, 409, { error: "plan_has_no_price" });
 
   /**
-   * A running subscription fixes the category they may buy into.
+   * Four independent reads, and the profile the response needs.
    *
-   * The browser now hides the other categories, but the browser is not the
-   * authority — a customer on an offline group plan must not be able to pay
-   * for online personal and strand the classes they are still owed.
+   * These ran one after another, each a separate round trip to the database
+   * before Razorpay was even called — the customer watched a button do
+   * nothing for most of a second. Nothing here depends on anything else here,
+   * so they go together.
    */
-  {
-    const { data: current } = await (sb as any)
-      .from("plans")
-      .select("training_mode, training_type, end_date")
-      .eq("user_id", plan.user_id)
-      .eq("status", "active")
-      .or("payment_status.is.null,payment_status.eq.success")
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
+  const [{ data: current }, { data: option }, { data: override }, { data: profile }] =
+    await Promise.all([
+      // A running subscription fixes the category they may buy into. The
+      // browser hides the other categories, but the browser is not the
+      // authority: a customer on an offline group plan must not be able to pay
+      // for online personal and strand the classes they are still owed.
+      (sb as any).from("plans")
+        .select("training_mode, training_type, end_date")
+        .eq("user_id", plan.user_id).eq("status", "active")
+        .or("payment_status.is.null,payment_status.eq.success")
+        .order("created_at", { ascending: false }).limit(1).maybeSingle(),
+      (sb as any).from("plan_options")
+        .select("id, name, price").eq("id", plan.plan_option_id).maybeSingle(),
+      // A customer can hold a negotiated price for a plan; it is what their
+      // own screens display, so it has to be what the gateway charges.
+      (sb as any).from("plan_price_overrides")
+        .select("price").eq("user_id", plan.user_id)
+        .eq("plan_option_id", plan.plan_option_id).maybeSingle(),
+      (sb as any).from("profiles").select("name, phone").eq("id", plan.user_id).maybeSingle(),
+    ]);
 
-    if (current) {
-      const same = (a: any, b: any) =>
-        ((a.training_mode ?? "offline") === (b.training_mode ?? "offline")) &&
-        ((a.training_type ?? "group") === (b.training_type ?? "group"));
-      if (!same(current, plan)) {
-        return json(res, 409, {
-          error: "category_locked",
-          message: `You're on a ${current.training_mode} ${current.training_type} plan until ${current.end_date}.`,
-        });
-      }
+  if (current) {
+    const same = (a: any, b: any) =>
+      ((a.training_mode ?? "offline") === (b.training_mode ?? "offline")) &&
+      ((a.training_type ?? "group") === (b.training_type ?? "group"));
+    if (!same(current, plan)) {
+      return json(res, 409, {
+        error: "category_locked",
+        message: `You're on a ${current.training_mode} ${current.training_type} plan until ${current.end_date}.`,
+      });
     }
   }
 
-  const { data: option } = await (sb as any)
-    .from("plan_options")
-    .select("id, name, price")
-    .eq("id", plan.plan_option_id)
-    .maybeSingle();
-
-  // A customer can hold a negotiated price for a plan (personal training is
-  // quoted per client). That override is what their own screens display, so
-  // it has to be what the gateway charges — otherwise the button says ₹8,000
-  // and Razorpay asks for ₹3,499. Still read on the server, never from the
-  // request: the browser cannot name its own price either way.
-  const { data: override } = await (sb as any)
-    .from("plan_price_overrides")
-    .select("price")
-    .eq("user_id", plan.user_id)
-    .eq("plan_option_id", plan.plan_option_id)
-    .maybeSingle();
-
-  const listed = Number(option?.price ?? 0);
   // Always the listed price — the catalogue, or this customer's own listed
   // price where one is set. Never what a previous plan happened to cost: an
-  // admin discount applied to one term is a one-off for that term, and must
-  // not follow the customer into every renewal after it.
+  // admin discount applied to one term is a one-off for that term.
+  const listed = Number(option?.price ?? 0);
   const price = override?.price != null ? Number(override.price) : listed;
   if (!option || !(price > 0)) return json(res, 409, { error: "plan_has_no_price" });
 
@@ -122,9 +113,6 @@ export default async function handler(req: any, res: any) {
     .eq("id", plan.id)
     .neq("payment_status", "success");
   if (bindErr) return json(res, 500, { error: bindErr.message });
-
-  const { data: profile } = await (sb as any)
-    .from("profiles").select("name, phone").eq("id", plan.user_id).maybeSingle();
 
   return json(res, 200, {
     key_id: RZP_KEY_ID,          // publishable by design; the secret never leaves the server
