@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight, ChevronDown, Check, Pause } from "lucide-react";
 import { offTimeAffectsSlot } from "@/lib/sessionPlan";
+import { classDone, todayLocalISO } from "@/lib/sessionProgress";
 
 // ── Brand tokens (match the dashboard) ───────────────────────────────────
 const GOLD   = "#f0a720";
@@ -41,10 +42,6 @@ interface Props {
 
 type DayState = "attended" | "upcoming" | "paused" | "off" | "rest" | "outside";
 
-function todayLocalISO() {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
 function iso(y: number, m: number, d: number) {
   return `${y}-${String(m + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
 }
@@ -89,16 +86,13 @@ export function ClassCalendar({ startDate, endDate, trainingDays, pauses, offTim
           return "paused";
         if (rec.status === "trainer_off") return "off";
         if (rec.status === "cancelled") return "rest";
-        if (rec.attended === true || rec.status === "completed") return "attended";
         /**
-         * A past class that is still 'scheduled'.
-         *
-         * In FitVed a class happens unless a pause or a trainer's day off says
-         * otherwise — that is the same rule expire_subscriptions() applies when
-         * it ages these rows. So it ran: show the tick. Anything else is the
-         * database's bookkeeping leaking onto the customer's calendar.
+         * Whether this class counts as taken is decided in one place, shared
+         * with the "N used / N left" counts on the dashboard and plan page.
+         * When the tick and the count disagree the customer believes the
+         * count, and the count was the thing that was wrong.
          */
-        return date < today ? "attended" : "upcoming";
+        return classDone({ ...rec, session_date: date }, today) ? "attended" : "upcoming";
       }
       if (date < startDate || date > endDate) return "outside";
       return "rest";
