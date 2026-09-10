@@ -23,6 +23,7 @@ import { SocietyBatches } from "@/components/dashboard/SocietyBatches";
 import { TrainerPauses } from "@/components/dashboard/TrainerPauses";
 import { ProgressRing } from "@/components/ui/progress-ring";
 import { ClassCalendar } from "@/components/dashboard/ClassCalendar";
+import { sessionsTaken, sessionsRemaining, sessionProgressPct } from "@/lib/sessionProgress";
 import { MarketingFeed } from "@/components/dashboard/MarketingFeed";
 import { AddEmailCard } from "@/components/dashboard/AddEmailCard";
 import { ClassModeGate } from "@/components/dashboard/ClassModeGate";
@@ -256,15 +257,25 @@ export default function Dashboard() {
   })();
 
   // ── Derived values ──────────────────────────────────────────────────────────
-  const totalDays   = plan ? daysBetween(plan.start_date, plan.end_date) : 0;
-  const elapsedDays = plan ? daysBetween(plan.start_date, new Date().toISOString()) : 0;
-  // Clamped at both ends: a plan that starts tomorrow has negative elapsed
-  // days, which drove the progress bar and "sessions used" below zero.
-  const progress    = totalDays > 0
-    ? Math.max(0, Math.min(100, Math.round((elapsedDays / totalDays) * 100)))
-    : 0;
-  const sessionsUsed  = plan ? Math.round((plan.total_sessions * progress) / 100) : 0;
-  const sessionsLeft  = plan ? Math.max(0, plan.total_sessions - sessionsUsed) : 0;
+  /**
+   * Classes taken, counted from the classes themselves.
+   *
+   * This used to be elapsed days ÷ plan length × total sessions — a measure of
+   * how far through the month the customer was, dressed up as attendance. On
+   * 10 Sept it told Ashwani "6 used · 6 left" while his calendar showed four
+   * ticks: it had counted a class he paused and the class he was walking into
+   * that evening. sessionsTaken() counts real rows by the same rule the
+   * calendar ticks them, so the ring, the bar and the ticks always agree.
+   */
+  const planSessions = useMemo(
+    () => (plan ? mySessions.filter((s: any) => s.plan_id === plan.id) : []),
+    [mySessions, plan?.id],
+  );
+  // Derive from the schedule only when this customer has no records at all —
+  // the same condition the calendar draws its ticks under.
+  const sessionsUsed  = sessionsTaken(planSessions, plan as any, undefined, mySessions.length === 0);
+  const sessionsLeft  = sessionsRemaining(sessionsUsed, plan as any);
+  const progress      = sessionProgressPct(sessionsUsed, plan as any);
 
   // Carry-forward = training days lost DURING the current plan period, both to
   // the customer's own pauses (capped at 1/3 of the plan) and to trainer
