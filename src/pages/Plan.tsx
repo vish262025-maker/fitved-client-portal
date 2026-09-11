@@ -16,6 +16,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { deriveSubscriptionStatus, isPaid } from "@/lib/subscription";
 import { useCurrentPlan } from "@/hooks/useCurrentPlan";
+import { useSessions } from "@/hooks/useSessions";
+import { sessionsTaken, sessionsRemaining, sessionProgressPct } from "@/lib/sessionProgress";
 
 const GOLD       = "#f0a720";
 const NAVY       = "#1E3A5F";
@@ -36,6 +38,8 @@ export default function Plan() {
   const customerName = profile?.name ?? "";
 
   const { data: plan, refetch } = useCurrentPlan(user?.id);
+  // Real class records — what "used" and "left" are counted from.
+  const { data: mySessions = [] } = useSessions(user?.id);
 
   // Trainer off-days — they earn the customer uncapped bonus classes.
   const { data: offTimes = [] } = useQuery({
@@ -197,11 +201,13 @@ export default function Plan() {
       : 0;
   const showSavings = durationMonths > 1 && savePct > 0;
 
-  const totalDays   = daysBetween(plan.start_date, plan.end_date);
-  const elapsedDays = daysBetween(plan.start_date, new Date().toISOString());
-  const progress    = totalDays > 0 ? Math.min(100, Math.round((elapsedDays / totalDays) * 100)) : 0;
-  const sessionsUsed  = Math.round((plan.total_sessions * progress) / 100);
-  const sessionsLeft  = plan.total_sessions - sessionsUsed;
+  // Classes taken, counted from the classes themselves rather than from how
+  // much of the month has gone by — same rule and same numbers as the
+  // dashboard ring and the calendar ticks. See @/lib/sessionProgress.
+  const planSessions = mySessions.filter((s: any) => s.plan_id === plan.id);
+  const sessionsUsed  = sessionsTaken(planSessions, plan as any, undefined, mySessions.length === 0);
+  const sessionsLeft  = sessionsRemaining(sessionsUsed, plan as any);
+  const progress      = sessionProgressPct(sessionsUsed, plan as any);
   const trainingDays: string[] = (plan.training_days ?? []).map((d: string) => d.slice(0, 3));
 
   // ── Carry-forward reward ─────────────────────────────────────────────
