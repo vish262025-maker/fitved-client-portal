@@ -35,11 +35,31 @@ export interface SessionLike {
  * still sitting at 'scheduled' did run — that is the same rule
  * expire_subscriptions() ages those rows by.
  */
-export function classDone(s: SessionLike, today: string): boolean {
+export function classDone(s: SessionLike, today: string, pauses: PauseLike[] = []): boolean {
   if (s.attended === false || s.status === "missed" || s.status === "paused") return false;
   if (s.status === "trainer_off" || s.status === "cancelled") return false;
-  if (s.attended === true || s.status === "completed") return true;
+  if (s.attended === true) return true;
+  if (pausedBy(s, pauses)) return false;
+  if (s.status === "completed") return true;
   return s.session_date < today;
+}
+
+export interface PauseLike { from: string; to: string }
+
+/**
+ * A class the customer's own pause covers, that nobody has marked.
+ *
+ * The nightly job ages every past class to 'completed'. A pause entered even a
+ * day late — Ashwani's 9–11 Sept pause was saved at 11:47 on the 11th — used
+ * to find the 10 Sept class already 'completed' and be unable to take it
+ * back: the calendar ticked it and the count spent it. A 'completed' row that
+ * nobody marked is bookkeeping, not attendance, and a pause outranks it.
+ * 20260911120000 fixes the rows themselves; this keeps the screen right in
+ * the meantime and in any window before the trigger catches up.
+ */
+export function pausedBy(s: SessionLike, pauses: PauseLike[]): boolean {
+  if (s.attended != null) return false;
+  return pauses.some((p) => p.from && p.to && s.session_date >= p.from && s.session_date <= p.to);
 }
 
 export interface PlanLike {
@@ -69,12 +89,14 @@ export function sessionsTaken(
    * two disagree again in the one case nobody would think to check.
    */
   allowScheduleFallback = true,
+  /** The customer's pauses — a class inside one is not a class taken. */
+  pauses: PauseLike[] = [],
 ): number {
   if (!plan) return 0;
   const cap = Number(plan.total_sessions ?? 0) || Number.POSITIVE_INFINITY;
 
   if (sessions.length) {
-    return Math.min(cap, sessions.filter((s) => classDone(s, today)).length);
+    return Math.min(cap, sessions.filter((s) => classDone(s, today, pauses)).length);
   }
   if (!allowScheduleFallback) return 0;
 
