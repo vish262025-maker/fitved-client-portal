@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight, ChevronDown, Check, Pause } from "lucide-react";
 import { offTimeAffectsSlot } from "@/lib/sessionPlan";
-import { classDone, todayLocalISO } from "@/lib/sessionProgress";
+import { classDone, pausedBy, todayLocalISO } from "@/lib/sessionProgress";
 
 // ── Brand tokens (match the dashboard) ───────────────────────────────────
 const GOLD   = "#f0a720";
@@ -84,6 +84,9 @@ export function ClassCalendar({ startDate, endDate, trainingDays, pauses, offTim
         // there is no separate "absent" state, so these are the same thing.
         if (rec.attended === false || rec.status === "missed" || rec.status === "paused")
           return "paused";
+        // A pause entered after the nightly job had already closed the class
+        // as 'completed' — the pause still wins. See pausedBy().
+        if (pausedBy({ ...rec, session_date: date }, pauses)) return "paused";
         if (rec.status === "trainer_off") return "off";
         if (rec.status === "cancelled") return "rest";
         /**
