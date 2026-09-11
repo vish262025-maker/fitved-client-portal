@@ -1,73 +1,64 @@
--- A pause can only be about today or later.
+-- Past-dated pauses: the admin may, the customer and trainer may not.
 --
--- A pause says "these classes will not happen". Said about a class that is
--- already over, it rewrites history. The customer's Pause page and the
--- trainer's pause dialog hid past dates in their date pickers, but the admin
--- Pauses tab had plain date inputs with no limit and nothing checked on save
--- — which is how Ashwani's 9–11 Sept pause was entered at 11:47 on the 11th,
--- after the 10 Sept class had already been closed as taken.
+-- A pause says "these classes will not happen". From the customer's Pause
+-- page or the trainer's pause dialog, a pause starts today or later — neither
+-- should be able to rewrite a class that is already over.
 --
--- And a date picker is not a rule: with the anon key and open RLS, anything
--- that reaches the REST API directly skips every screen. So the database
--- holds the line, with the same rule every screen applies (pauseRules.ts):
+-- The admin is the exception, on purpose. Customers tell FitVed about a
+-- missed class after the fact — Ashwani's 9–11 Sept pause was entered by the
+-- admin on the 11th — and when the admin records it, it has to take effect:
+-- the class comes off the customer's count, their calendar shows it paused,
+-- and the plan is extended. (20260911120000 is what makes the database honour
+-- a pause that arrives after its class was already closed as taken.)
 --
---   • a new pause starts today or later;
---   • editing a pause may only move dates that are today or later — so a
---     running pause can still be extended, or ended early (to_date moved back
---     as far as yesterday), but its past days stay exactly as they were;
---   • a status-only change (auto-complete, "End") is untouched.
+-- Every screen now records who put the pause in (created_by): the customer's
+-- own id, their trainer's, or the admin's. A past start date is accepted only
+-- when created_by is an admin or super admin.
 --
--- Deleting is deliberately not blocked: removing a customer clears their
--- pauses, and an admin must be able to remove a pause entered by mistake.
+-- With the anon key and open RLS, created_by is whatever the caller sends, so
+-- this is not a security boundary; it keeps every screen, and anything else
+-- that writes pauses, to the same rule.
+--
+-- Only INSERT is checked. Editing dates happens only in the admin tab, which
+-- may use any date; status-only changes (auto-complete, "End") and deletes
+-- are untouched. Existing pauses are not touched.
 --
 -- "Today" is India time, the same clock expire_subscriptions() closes
--- classes by. Existing pauses, past or present, are not touched.
+-- classes by.
 --
--- Additive & idempotent.
+-- Idempotent: safe to run again if an earlier version of this file was run.
 
 CREATE OR REPLACE FUNCTION public.pause_dates_guard()
 RETURNS trigger
 LANGUAGE plpgsql
+SECURITY DEFINER
 SET search_path = public
 AS $$
 DECLARE
   today date := (timezone('Asia/Kolkata', now()))::date;
 BEGIN
-  IF TG_OP = 'INSERT' THEN
-    IF NEW.to_date < NEW.from_date THEN
-      RAISE EXCEPTION 'A pause must end on or after the day it starts.'
-        USING ERRCODE = 'check_violation';
-    END IF;
-    IF NEW.from_date < today THEN
-      RAISE EXCEPTION 'A pause can''t start in the past. Pick today or a later date.'
-        USING ERRCODE = 'check_violation';
-    END IF;
-    RETURN NEW;
+  IF NEW.to_date < NEW.from_date THEN
+    RAISE EXCEPTION 'A pause must end on or after the day it starts.'
+      USING ERRCODE = 'check_violation';
   END IF;
 
-  -- UPDATE: only the dates a change actually affects have to be today+.
-  IF NEW.from_date IS DISTINCT FROM OLD.from_date
-     OR NEW.to_date IS DISTINCT FROM OLD.to_date THEN
-    IF NEW.to_date < NEW.from_date THEN
-      RAISE EXCEPTION 'A pause must end on or after the day it starts.'
-        USING ERRCODE = 'check_violation';
-    END IF;
-    IF NEW.from_date IS DISTINCT FROM OLD.from_date
-       AND LEAST(NEW.from_date, OLD.from_date) < today THEN
-      RAISE EXCEPTION 'Past classes can''t be changed. Only today or later dates can be moved.'
-        USING ERRCODE = 'check_violation';
-    END IF;
-    IF NEW.to_date IS DISTINCT FROM OLD.to_date
-       AND LEAST(NEW.to_date, OLD.to_date) < today - 1 THEN
-      RAISE EXCEPTION 'Past classes can''t be changed. Only today or later dates can be moved.'
-        USING ERRCODE = 'check_violation';
-    END IF;
+  IF NEW.from_date < today
+     AND NOT (
+       NEW.created_by IS NOT NULL AND (
+         EXISTS (SELECT 1 FROM public.admins       a WHERE a.id = NEW.created_by) OR
+         EXISTS (SELECT 1 FROM public.super_admins s WHERE s.id = NEW.created_by)
+       )
+     )
+  THEN
+    RAISE EXCEPTION 'A pause can''t start in the past. Pick today or a later date.'
+      USING ERRCODE = 'check_violation';
   END IF;
+
   RETURN NEW;
 END;
 $$;
 
 DROP TRIGGER IF EXISTS pause_dates_guard_trg ON public.pauses;
 CREATE TRIGGER pause_dates_guard_trg
-  BEFORE INSERT OR UPDATE ON public.pauses
+  BEFORE INSERT ON public.pauses
   FOR EACH ROW EXECUTE FUNCTION public.pause_dates_guard();

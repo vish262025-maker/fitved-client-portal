@@ -268,7 +268,14 @@ export default function Pause() {
               ? `Paused from ${formatDate(activePause!.from)} to ${formatDate(activePause!.to)}.`
               : "All sessions are scheduled as planned."}
           </p>
-          {isPaused && !isLocked ? (
+          {isPaused && activePause!.setByFitved && (
+            <p style={{ fontSize: 12, color: MUTED, marginTop: 6 }}>Set by FitVed</p>
+          )}
+          {isPaused && activePause!.setByFitved ? (
+            <p className="mt-5 text-sm" style={{ color: MUTED }}>
+              Please contact support to change this pause.
+            </p>
+          ) : isPaused && !isLocked ? (
             <button
               onClick={handleResume}
               className="mt-5 w-full rounded-2xl border-none cursor-pointer"
@@ -309,7 +316,9 @@ export default function Pause() {
                           <p className="font-medium" style={{ fontSize: 13, color: NAVY }}>
                             {formatDate(p.from)} — {formatDate(p.to)}
                           </p>
-                          <p style={{ fontSize: 11, color: MUTED }}>{daysBetween(p.from, p.to)} days</p>
+                          <p style={{ fontSize: 11, color: MUTED }}>
+                            {daysBetween(p.from, p.to)} days{p.setByFitved ? " · Set by FitVed" : ""}
+                          </p>
                         </>
                       )}
                     </div>
@@ -362,19 +371,19 @@ export default function Pause() {
                 <p className="font-display text-lg">{activePause ? "Currently paused" : "All classes active"}</p>
                 <p className="text-sm text-muted-foreground">
                   {activePause
-                    ? `From ${formatDate(activePause.from)} to ${formatDate(activePause.to)}`
+                    ? `From ${formatDate(activePause.from)} to ${formatDate(activePause.to)}${activePause.setByFitved ? " · Set by FitVed" : ""}`
                     : "You have no active pause."}
                 </p>
               </div>
             </div>
-            {activePause && !isLocked && (
+            {activePause && !isLocked && !activePause.setByFitved && (
               <Button onClick={handleResume} variant="destructive">
                 <Trash2 className="mr-2 h-4 w-4" /> Delete pause
               </Button>
             )}
-            {activePause && isLocked && (
+            {activePause && (isLocked || activePause.setByFitved) && (
               <p className="text-sm text-muted-foreground mt-2 md:mt-0">
-                Contact support to resume early
+                {activePause.setByFitved ? "Contact support to change this pause" : "Contact support to resume early"}
               </p>
             )}
           </div>
@@ -447,7 +456,9 @@ export default function Pause() {
                 <li key={p.id} className="flex items-center justify-between py-3">
                   <div>
                     <p className="font-medium">{formatDate(p.from)} — {formatDate(p.to)}</p>
-                    <p className="text-xs text-muted-foreground">{daysBetween(p.from, p.to)} days</p>
+                    <p className="text-xs text-muted-foreground">
+                      {daysBetween(p.from, p.to)} days{p.setByFitved ? " · Set by FitVed" : ""}
+                    </p>
                   </div>
                   <Badge variant="secondary">Completed</Badge>
                 </li>
