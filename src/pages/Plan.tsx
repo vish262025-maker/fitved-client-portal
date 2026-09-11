@@ -205,7 +205,8 @@ export default function Plan() {
   // much of the month has gone by — same rule and same numbers as the
   // dashboard ring and the calendar ticks. See @/lib/sessionProgress.
   const planSessions = mySessions.filter((s: any) => s.plan_id === plan.id);
-  const sessionsUsed  = sessionsTaken(planSessions, plan as any, undefined, mySessions.length === 0);
+  const allPauses = [...history, ...(activePause ? [activePause] : [])];
+  const sessionsUsed  = sessionsTaken(planSessions, plan as any, undefined, mySessions.length === 0, allPauses);
   const sessionsLeft  = sessionsRemaining(sessionsUsed, plan as any);
   const progress      = sessionProgressPct(sessionsUsed, plan as any);
   const trainingDays: string[] = (plan.training_days ?? []).map((d: string) => d.slice(0, 3));
@@ -215,7 +216,6 @@ export default function Plan() {
   // period. The plan only stores the current end date, so we compute the
   // "original" (no-pause) end and compare it to the (extended) end.
   const planDaysFull: string[] = plan.training_days ?? [];
-  const allPauses = [...history, ...(activePause ? [activePause] : [])];
   const baseEnd        = calculatePlanEndDate(plan.start_date, plan.total_sessions, planDaysFull);
   const baseEndISO     = isoDate(baseEnd);
   // Pause carry-forward is capped at 1/3 of the plan; trainer off-day bonuses

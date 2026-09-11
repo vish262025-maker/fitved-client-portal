@@ -273,7 +273,8 @@ export default function Dashboard() {
   );
   // Derive from the schedule only when this customer has no records at all —
   // the same condition the calendar draws its ticks under.
-  const sessionsUsed  = sessionsTaken(planSessions, plan as any, undefined, mySessions.length === 0);
+  const allPauses = [...history, ...(activePause ? [activePause] : [])];
+  const sessionsUsed  = sessionsTaken(planSessions, plan as any, undefined, mySessions.length === 0, allPauses);
   const sessionsLeft  = sessionsRemaining(sessionsUsed, plan as any);
   const progress      = sessionProgressPct(sessionsUsed, plan as any);
 
@@ -281,7 +282,6 @@ export default function Dashboard() {
   // the customer's own pauses (capped at 1/3 of the plan) and to trainer
   // off-days (bonus classes — never capped), matching recalculatePlanDates.
   // Extra classes the trainer already took to compensate reduce the bonus.
-  const allPauses = [...history, ...(activePause ? [activePause] : [])];
   const planBaseEnd = plan
     ? isoDate(calculatePlanEndDate(plan.start_date, plan.total_sessions, plan.training_days ?? []))
     : "";
