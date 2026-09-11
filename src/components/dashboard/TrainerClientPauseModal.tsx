@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { pauseDatesError } from "@/lib/pauseRules";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { recalculatePlanDates } from "@/stores/pauseStore";
@@ -63,6 +64,8 @@ export function TrainerClientPauseModal({ open, onOpenChange, clientId, clientNa
   const pauseMut = useMutation({
     mutationFn: async () => {
       if (!range?.from || !range?.to) throw new Error("Please select a date range");
+      const problem = pauseDatesError(toLocalISODate(range.from), toLocalISODate(range.to), toLocalISODate(new Date()));
+      if (problem) throw new Error(problem);
       if (tooFewSessions) throw new Error("Client must miss at least 2 sessions to pause.");
       if (tooManySessions) throw new Error(`Maximum allowed pause is ${maxCarryForward} sessions.`);
 

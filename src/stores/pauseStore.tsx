@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, type ReactNode } from "react";
+import { pauseDatesError } from "@/lib/pauseRules";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -221,6 +222,9 @@ export function PauseProvider({ children }: { children: ReactNode }) {
   const pauseMut = useMutation({
     mutationFn: async ({ from, to }: { from: string; to: string }) => {
       if (!user) throw new Error("Not signed in");
+      // The date picker hides past days; this holds even if it didn't.
+      const problem = pauseDatesError(from.slice(0, 10), to.slice(0, 10), todayLocalISO());
+      if (problem) throw new Error(problem);
       const { error } = await (supabase.from("pauses") as any).insert({
         user_id: user.id,
         client_id: user.id,
