@@ -44,3 +44,5 @@ seo-weekly-report.md
 
 # Kept local only — not published
 .env.example
+.vercel
+.env*

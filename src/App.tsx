@@ -50,6 +50,7 @@ import LocationSEOPage from "./pages/blog/LocationSEOPage";
 import TopicHubPage from "./pages/blog/TopicHubPage";
 import CalculatorsPage from "./pages/blog/CalculatorsPage";
 import StaticCategoryPage from "./pages/blog/StaticCategoryPage";
+import CreatorLanding from "./pages/CreatorLanding";
 
 const StaticPageRedirect = ({ file }: { file: string }) => {
   useEffect(() => {
@@ -206,6 +207,13 @@ const App = () => (
               <Route path="/tdee-calculator" element={<GeoLandingPage />} />
               <Route path="/daily-calorie-burn-calculator" element={<GeoLandingPage />} />
               <Route path="/indian-fat-loss-guide" element={<GeoLandingPage />} />
+
+              {/* Creator-partner campaign pages (getfitved.com/<slug>) — data-driven
+                  off src/data/creatorCampaigns.ts, one route for every creator.
+                  React Router ranks static paths above this regardless of where
+                  it's declared, so it can't shadow any route above it. Unknown
+                  slugs render NotFound from inside CreatorLanding itself. */}
+              <Route path="/:creatorSlug" element={<CreatorLanding />} />
 
               <Route path="*" element={<NotFound />} />
             </Routes>

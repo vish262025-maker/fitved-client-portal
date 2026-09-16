@@ -38,6 +38,42 @@ export type Database = {
         }
         Relationships: []
       }
+      creator_leads: {
+        Row: {
+          activity_level: string | null
+          campaign: string
+          created_at: string
+          creator: string
+          goal: string | null
+          id: string
+          name: string
+          phone: string
+          source: string | null
+        }
+        Insert: {
+          activity_level?: string | null
+          campaign: string
+          created_at?: string
+          creator: string
+          goal?: string | null
+          id?: string
+          name: string
+          phone: string
+          source?: string | null
+        }
+        Update: {
+          activity_level?: string | null
+          campaign?: string
+          created_at?: string
+          creator?: string
+          goal?: string | null
+          id?: string
+          name?: string
+          phone?: string
+          source?: string | null
+        }
+        Relationships: []
+      }
       b2b_leads: {
         Row: {
           company: string | null
