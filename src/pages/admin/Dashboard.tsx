@@ -5,6 +5,7 @@ import { format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { buildMonthlyIncomeFromBilling, monthlyBreakdownArray, monthKey } from "@/lib/incomeAllocation";
+import { isPaid } from "@/lib/subscription";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -69,7 +70,7 @@ export default function AdminDashboard() {
         (supabase as any).from("profiles").select("id, name, phone, society_id, trainer_id, time_slot, assigned_admin_id"),
         // ALL plans (incl. completed) — used both for the client widgets and
         // for income proration, so fetch once with the union of columns
-        (supabase as any).from("plans").select("id, user_id, amount, discount, status, start_date, end_date, auto_renew, renewal_date"),
+        (supabase as any).from("plans").select("id, user_id, amount, discount, status, payment_status, start_date, end_date, auto_renew, renewal_date"),
         supabase.from("pauses").select("user_id, from_date, to_date, status"),
         // Fetch all billing with plan_id for proration (type marks refunds)
         (supabase as any).from("billing_history").select("amount, payment_date, plan_id, type"),
@@ -157,8 +158,17 @@ export default function AdminDashboard() {
       // Not renewed = each client's most recent plan has already ended,
       // so they have no current coverage and haven't been renewed.
       // "stopped" customers deliberately churned — don't chase them for renewal.
+      //
+      // Every checkout is born `stopped` + `payment_status: "pending"` (see
+      // repurchase.ts), so an abandoned one leaves a row behind carrying a
+      // future end_date. Those never represented coverage, so they must be
+      // skipped BEFORE picking the latest plan — otherwise an abandoned
+      // checkout outranks the real plan that lapsed and hides the customer.
+      // isPaid() is the one definition of "bought": NULL means a legacy plan
+      // collected offline, so those still count.
       const latestPlan = new Map<string, any>();
       for (const p of plans) {
+        if (!isPaid(p)) continue;
         const cur = latestPlan.get(p.user_id);
         if (!cur || p.end_date > cur.end_date) latestPlan.set(p.user_id, p);
       }
