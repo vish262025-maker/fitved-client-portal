@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, type ReactNode } from "react";
+import { pauseDatesError, setByFitved } from "@/lib/pauseRules";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -146,6 +147,8 @@ export interface PauseRecord {
   from: string;
   to: string;
   status: "active" | "completed";
+  /** Put in by the admin or the trainer rather than the customer themselves. */
+  setByFitved: boolean;
 }
 
 interface PauseContextValue {
@@ -182,6 +185,7 @@ export function PauseProvider({ children }: { children: ReactNode }) {
     from: p.from_date,
     to: p.to_date,
     status: p.status as "active" | "completed",
+    setByFitved: setByFitved(p.created_by, user?.id),
   }));
 
   // A pause whose end date has passed is treated as resumed automatically.
@@ -221,12 +225,16 @@ export function PauseProvider({ children }: { children: ReactNode }) {
   const pauseMut = useMutation({
     mutationFn: async ({ from, to }: { from: string; to: string }) => {
       if (!user) throw new Error("Not signed in");
+      // The date picker hides past days; this holds even if it didn't.
+      const problem = pauseDatesError(from.slice(0, 10), to.slice(0, 10), todayLocalISO());
+      if (problem) throw new Error(problem);
       const { error } = await (supabase.from("pauses") as any).insert({
         user_id: user.id,
         client_id: user.id,
         from_date: from.slice(0, 10),
         to_date: to.slice(0, 10),
         status: "active",
+        created_by: user.id,
       });
       if (error) throw error;
       await recalculatePlanDates(user.id);
@@ -240,6 +248,11 @@ export function PauseProvider({ children }: { children: ReactNode }) {
   const resumeMut = useMutation({
     mutationFn: async () => {
       if (!activePause || !user) return;
+      // A pause the admin or trainer put in is FitVed's to change — the
+      // customer deleting it would quietly undo what was agreed with them.
+      if (activePause.setByFitved) {
+        throw new Error("This pause was set by FitVed. Please contact support to change it.");
+      }
       const today = todayLocalISO();
       
       if (today <= activePause.from) {

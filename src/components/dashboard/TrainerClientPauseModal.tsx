@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { pauseDatesError } from "@/lib/pauseRules";
+import { useAuth } from "@/contexts/AuthContext";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { recalculatePlanDates } from "@/stores/pauseStore";
@@ -25,6 +27,8 @@ function toLocalISODate(d: Date): string {
 }
 
 export function TrainerClientPauseModal({ open, onOpenChange, clientId, clientName }: Props) {
+  // Recorded on the pause so the customer sees it came from FitVed, not them.
+  const { user } = useAuth();
   const qc = useQueryClient();
   const [range, setRange] = useState<DateRange | undefined>();
   const [calOpen, setCalOpen] = useState(false);
@@ -63,6 +67,8 @@ export function TrainerClientPauseModal({ open, onOpenChange, clientId, clientNa
   const pauseMut = useMutation({
     mutationFn: async () => {
       if (!range?.from || !range?.to) throw new Error("Please select a date range");
+      const problem = pauseDatesError(toLocalISODate(range.from), toLocalISODate(range.to), toLocalISODate(new Date()));
+      if (problem) throw new Error(problem);
       if (tooFewSessions) throw new Error("Client must miss at least 2 sessions to pause.");
       if (tooManySessions) throw new Error(`Maximum allowed pause is ${maxCarryForward} sessions.`);
 
@@ -72,6 +78,7 @@ export function TrainerClientPauseModal({ open, onOpenChange, clientId, clientNa
         from_date: toLocalISODate(range.from),
         to_date: toLocalISODate(range.to),
         status: "active",
+        created_by: user?.id ?? null,
       });
       if (error) throw error;
       await recalculatePlanDates(clientId);

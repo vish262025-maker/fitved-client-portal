@@ -96,3 +96,38 @@ describe("the schedule fallback", () => {
     expect(sessionsTaken([], ashwani, "2026-09-10", false)).toBe(0);
   });
 });
+
+/**
+ * Ashwani, 11 Sept 2026. His 9–11 Sept pause was saved at 11:47 on the 11th —
+ * after the nightly job had already closed the 10 Sept class as 'completed'.
+ * The database refused to take it back, so the calendar ticked it and the
+ * count spent it: "5 used" for four classes.
+ */
+describe("a pause entered after the class was auto-closed", () => {
+  const rows = [
+    S("2026-08-29", "paused"),
+    S("2026-09-01", "completed"),
+    S("2026-09-03", "completed"),
+    S("2026-09-05", "completed"),
+    S("2026-09-08", "completed"),
+    S("2026-09-10", "completed"),   // inside the pause, closed by the nightly job
+    S("2026-09-12", "scheduled"),
+  ];
+  const pauses = [
+    { from: "2026-08-29", to: "2026-08-30" },
+    { from: "2026-09-09", to: "2026-09-11" },
+  ];
+
+  it("does not count the paused class as taken", () => {
+    expect(sessionsTaken(rows, ashwani, "2026-09-11", true, pauses)).toBe(4);
+  });
+
+  it("still counts it without the pause — the pause is what changes it", () => {
+    expect(sessionsTaken(rows, ashwani, "2026-09-11", true, [])).toBe(5);
+  });
+
+  it("never overrides a class someone actually marked", () => {
+    const marked = S("2026-09-10", "completed", true);
+    expect(classDone(marked, "2026-09-11", pauses)).toBe(true);
+  });
+});

@@ -9,6 +9,9 @@ import { Pencil, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { formatDate } from "@/lib/dates";
 import { recalculatePlanDates } from "@/stores/pauseStore";
+import { pauseDatesError } from "@/lib/pauseRules";
+import { todayLocalISO } from "@/lib/sessionProgress";
+import { useAuth } from "@/contexts/AuthContext";
 
 export function PausesTab({ userId }: { userId: string }) {
   const qc = useQueryClient();
@@ -17,6 +20,9 @@ export function PausesTab({ userId }: { userId: string }) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editFrom, setEditFrom] = useState("");
   const [editTo, setEditTo] = useState("");
+  // The admin signed in — stamped on every pause they add, which is what lets
+  // the database accept a past date from here and nowhere else.
+  const { user } = useAuth();
 
   const { data: pauses = [] } = useQuery({
     queryKey: ["customer-pauses", userId],
@@ -39,9 +45,14 @@ export function PausesTab({ userId }: { userId: string }) {
 
   const create = useMutation({
     mutationFn: async () => {
-      if (from > to) throw new Error("From date must be on or before To date");
+      // The admin may record a pause after the fact — a customer reporting a
+      // missed class late. It takes effect: the class comes off their count,
+      // their calendar shows it paused, and the plan is extended.
+      const problem = pauseDatesError(from, to, todayLocalISO(), { byAdmin: true });
+      if (problem) throw new Error(problem);
       const { error } = await (supabase.from("pauses") as any).insert({
         user_id: userId, client_id: userId, from_date: from, to_date: to, status: "active",
+        created_by: user?.id ?? null,
       });
       if (error) throw error;
       await recalculatePlanDates(userId);
@@ -66,8 +77,8 @@ export function PausesTab({ userId }: { userId: string }) {
 
   const saveEdit = useMutation({
     mutationFn: async () => {
-      if (!editFrom || !editTo) throw new Error("Pick both dates");
-      if (editFrom > editTo) throw new Error("From date must be on or before To date");
+      const problem = pauseDatesError(editFrom, editTo, todayLocalISO(), { byAdmin: true });
+      if (problem) throw new Error(problem);
       const { error } = await supabase.from("pauses")
         .update({ from_date: editFrom, to_date: editTo })
         .eq("id", editingId!);
@@ -105,9 +116,10 @@ export function PausesTab({ userId }: { userId: string }) {
           </div>
           <div className="space-y-1.5">
             <Label>To</Label>
-            <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} />
+            <Input type="date" min={from || undefined} value={to} onChange={(e) => setTo(e.target.value)} />
           </div>
         </div>
+        <p className="text-xs text-muted-foreground">Past dates are allowed here — the customer will see this pause on their calendar.</p>
         <Button onClick={() => create.mutate()} disabled={!from || !to || create.isPending}>
           {create.isPending ? "Adding…" : "Add pause"}
         </Button>
