@@ -8,6 +8,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { CITIES, areasForCity } from "@/lib/cities";
 import { SPECIALIZATIONS } from "@/lib/specializations";
+import { thumbPathFor } from "@/lib/imageUpload";
 import {
   Search, BadgeCheck, MapPin, Clock, Users, Wifi, Home, X, ArrowRight, ArrowLeft, SlidersHorizontal,
 } from "lucide-react";
@@ -26,6 +27,10 @@ const EXPERIENCE = [
 ];
 
 const publicUrl = (p: string | null | undefined) => (p ? supabase.storage.from(BUCKET).getPublicUrl(p).data.publicUrl : null);
+// Small (~640px) variant for card thumbnails — falls back to the full photo
+// via onError below for any trainer who hasn't re-saved their photo since
+// this shipped and so has no thumb uploaded yet.
+const publicThumbUrl = (p: string | null | undefined) => (p ? publicUrl(thumbPathFor(p)) : null);
 
 /** "Harsh Saini" → "H Saini" (first name shortened to its initial for cards). */
 const cardName = (name: string) => {
@@ -336,7 +341,8 @@ export default function TrainerListing() {
             <>
               <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
                 {filtered.slice(0, visible).map((t) => {
-                  const photo = publicUrl(t.photo_path);
+                  const photo = publicThumbUrl(t.photo_path);
+                  const photoFull = publicUrl(t.photo_path);
                   const initials = (t.name || "T").split(" ").map((p: string) => p[0]).slice(0, 2).join("").toUpperCase();
                   const langs: string[] = t.languages ?? [];
                   const specList: string[] = t.specializations ?? [];
@@ -345,7 +351,9 @@ export default function TrainerListing() {
                       className="group flex flex-col overflow-hidden rounded-2xl border border-fv-navy/10 bg-white shadow-card transition-all duration-200 hover:-translate-y-1 hover:border-fv-orange/40 hover:shadow-lg">
                       <div className="relative h-56 overflow-hidden bg-fv-navy">
                         {photo
-                          ? <img src={photo} alt={t.name} loading="lazy" className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105" />
+                          ? <img src={photo} alt={t.name} loading="lazy"
+                              onError={(e) => { if (photoFull) { e.currentTarget.onerror = null; e.currentTarget.src = photoFull; } }}
+                              className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105" />
                           : <div className="grid h-full w-full place-items-center font-display text-4xl text-white/90">{initials}</div>}
                         <div className="absolute inset-0 bg-gradient-to-t from-fv-navy/95 via-fv-navy/25 to-transparent" />
                         <span className="absolute left-3 top-3 inline-flex items-center gap-1 rounded-full bg-white/95 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-fv-navy shadow-sm">

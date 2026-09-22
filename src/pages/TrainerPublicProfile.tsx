@@ -12,9 +12,17 @@ import {
 import { FitvedLogo } from "@/components/FitvedLogo";
 import { BlogSeo } from "@/components/blog/BlogSeo";
 import { SITE_URL } from "@/lib/blog/seo";
+import { thumbPathFor } from "@/lib/imageUpload";
 
 const BUCKET = "trainer-assets";
 const publicUrl = (p: string | null | undefined) => (p ? supabase.storage.from(BUCKET).getPublicUrl(p).data.publicUrl : null);
+// Small (~640px) variant for the gallery grid and testimonial avatars —
+// falls back to the full photo via onError below for media uploaded before
+// this shipped, which has no thumb yet.
+const publicThumbUrl = (p: string | null | undefined) => (p ? publicUrl(thumbPathFor(p)) : null);
+const onThumbError = (full: string | null) => (e: React.SyntheticEvent<HTMLImageElement>) => {
+  if (full) { e.currentTarget.onerror = null; e.currentTarget.src = full; }
+};
 
 /** "Shashi Kumar" → "S Kumar" — customers only ever see the shortened name
  *  (matches the listing cards); admins still see the full name. */
@@ -249,7 +257,8 @@ export default function TrainerPublicProfile() {
           <section><SectionTitle>Transformations</SectionTitle>
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
               {transformations.map((m: any) => (
-                <img key={m.id} src={publicUrl(m.file_path)!} alt="Client transformation" loading="lazy"
+                <img key={m.id} src={publicThumbUrl(m.file_path)!} alt="Client transformation" loading="lazy"
+                  onError={onThumbError(publicUrl(m.file_path))}
                   className="aspect-square w-full rounded-2xl object-cover border" />
               ))}
             </div>
@@ -261,7 +270,8 @@ export default function TrainerPublicProfile() {
           <section><SectionTitle>Gallery</SectionTitle>
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
               {galleryImgs.map((m: any) => (
-                <img key={m.id} src={publicUrl(m.file_path)!} alt="Workout" loading="lazy"
+                <img key={m.id} src={publicThumbUrl(m.file_path)!} alt="Workout" loading="lazy"
+                  onError={onThumbError(publicUrl(m.file_path))}
                   className="aspect-square w-full rounded-2xl object-cover border" />
               ))}
             </div>
@@ -288,7 +298,9 @@ export default function TrainerPublicProfile() {
                 <div key={r.id} className="rounded-2xl border bg-white p-5 shadow-card">
                   <div className="flex items-center gap-3">
                     {publicUrl(r.client_image) ? (
-                      <img src={publicUrl(r.client_image)!} alt={r.client_name} className="h-11 w-11 rounded-full object-cover" />
+                      <img src={publicThumbUrl(r.client_image)!} alt={r.client_name}
+                        onError={onThumbError(publicUrl(r.client_image))}
+                        className="h-11 w-11 rounded-full object-cover" />
                     ) : <span className="grid place-items-center h-11 w-11 rounded-full bg-fv-navy/5"><Quote className="h-4 w-4 text-fv-navy/40" /></span>}
                     <div>
                       <p className="font-semibold text-fv-navy">{r.client_name}</p>

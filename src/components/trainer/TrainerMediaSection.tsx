@@ -5,7 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Loader2, Plus, X, Video as VideoIcon, ImagePlus } from "lucide-react";
-import { shrinkImage } from "@/lib/imageUpload";
+import { shrinkImage, thumbPathFor, THUMB_OPTS } from "@/lib/imageUpload";
 
 const BUCKET = "trainer-assets";
 const IMAGE_LIMIT = 20;
@@ -58,6 +58,14 @@ export default function TrainerMediaSection({ trainerId }: { trainerId: string }
         const path = `media/${trainerId}/${Date.now()}-${sanitize(f.name)}`;
         const up = await supabase.storage.from(BUCKET).upload(path, await shrinkImage(f), { cacheControl: "31536000" });
         if (up.error) throw up.error;
+        if (!video) {
+          // Small variant for the gallery grid — non-critical, don't fail the upload over it.
+          try {
+            await supabase.storage.from(BUCKET).upload(thumbPathFor(path), await shrinkImage(f, THUMB_OPTS), { cacheControl: "31536000" });
+          } catch (e) {
+            console.warn("Thumbnail upload failed:", e);
+          }
+        }
         const ins = await sb.from("trainer_media").insert({ trainer_id: trainerId, kind, file_path: path });
         if (ins.error) throw ins.error;
       }

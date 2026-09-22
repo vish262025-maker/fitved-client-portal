@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Loader2, Plus, X, Star, Quote } from "lucide-react";
-import { shrinkImage } from "@/lib/imageUpload";
+import { shrinkImage, thumbPathFor, THUMB_OPTS } from "@/lib/imageUpload";
 
 const BUCKET = "trainer-assets";
 const sanitize = (n: string) => n.replace(/[^a-zA-Z0-9.-]/g, "_");
@@ -61,6 +61,12 @@ export default function TrainerTestimonialsSection({ trainerId }: { trainerId: s
           const path = `testimonials/${trainerId}/${Date.now()}-${sanitize(f.name)}`;
           const up = await supabase.storage.from(BUCKET).upload(path, await shrinkImage(f), { cacheControl: "31536000" });
           if (up.error) throw up.error;
+          // Small variant for the testimonial avatar — non-critical, don't fail the save over it.
+          try {
+            await supabase.storage.from(BUCKET).upload(thumbPathFor(path), await shrinkImage(f, THUMB_OPTS), { cacheControl: "31536000" });
+          } catch (e) {
+            console.warn("Thumbnail upload failed:", e);
+          }
           payload[slot.key] = path;
         }
       }

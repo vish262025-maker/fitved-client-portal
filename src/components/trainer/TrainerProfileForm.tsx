@@ -20,7 +20,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { SPECIALIZATIONS } from "@/lib/specializations";
 import { CITIES, areasForCity } from "@/lib/cities";
 import { buildTrainerSlug } from "@/lib/trainerSlug";
-import { shrinkImage } from "@/lib/imageUpload";
+import { shrinkImage, thumbPathFor, THUMB_OPTS } from "@/lib/imageUpload";
 
 const LANGUAGES = [
   "English", "Hindi", "Kannada", "Tamil", "Telugu", "Malayalam", "Marathi",
@@ -343,6 +343,12 @@ export default function TrainerProfileForm({
         const { error } = await supabase.storage.from(BUCKET).upload(p, await shrinkImage(photoFile), { upsert: true, cacheControl: "31536000" });
         if (error) throw error;
         nextPhoto = p;
+        // Small variant for listing cards — non-critical, don't fail the save over it.
+        try {
+          await supabase.storage.from(BUCKET).upload(thumbPathFor(p), await shrinkImage(photoFile, THUMB_OPTS), { upsert: true, cacheControl: "31536000" });
+        } catch (e) {
+          console.warn("Thumbnail upload failed:", e);
+        }
       }
 
       // CV

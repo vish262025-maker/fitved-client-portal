@@ -11,6 +11,20 @@
  * cannot decode it (an odd format, a corrupt file) the original is uploaded
  * rather than failing the save.
  */
+/**
+ * Options for the small variant of an uploaded photo — listing cards,
+ * testimonial avatars and gallery grids display these at well under 500px,
+ * so they don't need the full 1600px original shrinkImage() produces for the
+ * hero/detail view. Stored at thumbPathFor(path) alongside the original.
+ */
+export const THUMB_OPTS = { maxWidth: 640, quality: 0.75 };
+
+/** Derives the thumbnail's storage path from the original's: "a/b.jpg" -> "a/b-thumb.jpg". */
+export function thumbPathFor(path: string): string {
+  const i = path.lastIndexOf(".");
+  return i === -1 ? `${path}-thumb` : `${path.slice(0, i)}-thumb${path.slice(i)}`;
+}
+
 export async function shrinkImage(
   file: File,
   { maxWidth = 1600, quality = 0.8 }: { maxWidth?: number; quality?: number } = {},

@@ -13,7 +13,7 @@ import { SPECIALIZATIONS } from "@/lib/specializations";
 import {
   Loader2, ArrowRight, ArrowLeft, Check, ImageIcon, Wifi, Home, MapPin, X,
 } from "lucide-react";
-import { shrinkImage } from "@/lib/imageUpload";
+import { shrinkImage, thumbPathFor, THUMB_OPTS } from "@/lib/imageUpload";
 
 const BUCKET = "trainer-assets";
 const NAVY = "#1E3A5F";
@@ -252,6 +252,12 @@ export default function TrainerCompleteProfileDialog({
         const { error } = await supabase.storage.from(BUCKET).upload(p, await shrinkImage(photoFile), { upsert: true, cacheControl: "31536000" });
         if (error) throw error;
         nextPhoto = p;
+        // Small variant for listing cards — non-critical, don't fail the save over it.
+        try {
+          await supabase.storage.from(BUCKET).upload(thumbPathFor(p), await shrinkImage(photoFile, THUMB_OPTS), { upsert: true, cacheControl: "31536000" });
+        } catch (e) {
+          console.warn("Thumbnail upload failed:", e);
+        }
       }
       const { error } = await sb.from("trainers").update({
         name: name.trim(),
