@@ -133,6 +133,27 @@ function useReveal(threshold = 0.15) {
   return ref;
 }
 
+/**
+ * Matches Tailwind's `sm:` breakpoint (640px). For layouts that render an
+ * autoplaying <video> in only one of two responsive branches: CSS `hidden` /
+ * `sm:hidden` only hides an element visually — the browser can still fully
+ * download and play a `display:none` <video autoPlay>, so the *other*
+ * branch's videos are wasted bytes on every load, not just invisible ones.
+ * Gate which branch actually mounts on this instead of on CSS alone.
+ */
+function useIsDesktopSm() {
+  const [isDesktop, setIsDesktop] = useState(
+    () => typeof window !== "undefined" && window.matchMedia("(min-width: 640px)").matches,
+  );
+  useEffect(() => {
+    const mql = window.matchMedia("(min-width: 640px)");
+    const onChange = () => setIsDesktop(mql.matches);
+    mql.addEventListener("change", onChange);
+    return () => mql.removeEventListener("change", onChange);
+  }, []);
+  return isDesktop;
+}
+
 export default function Landing() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [active, setActive] = useState("home");
@@ -1499,24 +1520,40 @@ const VIDEO_TESTIMONIALS: VideoTestimonial[] = [1, 2, 3, 4].map((n) => ({
 function VideoTestimonials() {
   const ref = useReveal(0.1);
   const [active, setActive] = useState<VideoTestimonial | null>(null);
+  const isDesktopSm = useIsDesktopSm();
 
-  const VideoCard = ({ t }: { t: VideoTestimonial }) => (
+  // `eager` (the first card only) autoplays on mount, like before. Every other
+  // card shows just its poster image — zero network cost — and only mounts a
+  // real <video> (starting playback) while the pointer is over it. Hover has
+  // no touch equivalent, so on mobile (most of this site's traffic) those
+  // cards simply never download until someone taps one open in the full
+  // player below, which is unchanged either way.
+  const VideoCard = ({ t, eager = false }: { t: VideoTestimonial; eager?: boolean }) => {
+    const [hovering, setHovering] = useState(false);
+    const showVideo = eager || hovering;
+    return (
     <button
       type="button"
       onClick={() => setActive(t)}
+      onMouseEnter={() => setHovering(true)}
+      onMouseLeave={() => setHovering(false)}
       aria-label="Play client testimonial video"
       className="group relative block aspect-[9/16] w-full overflow-hidden rounded-2xl border border-white/10 bg-black shadow-card transition-all duration-300 hover:-translate-y-1 hover:border-fv-orange/40 hover:shadow-elevated"
     >
-      <video
-        src={t.video}
-        poster={t.poster}
-        muted
-        loop
-        autoPlay
-        playsInline
-        preload="metadata"
-        className="h-full w-full object-cover"
-      />
+      {showVideo ? (
+        <video
+          src={t.video}
+          poster={t.poster}
+          muted
+          loop
+          autoPlay
+          playsInline
+          preload="metadata"
+          className="h-full w-full object-cover"
+        />
+      ) : (
+        <img src={t.poster} alt="" loading="lazy" className="h-full w-full object-cover" />
+      )}
       {/* Gradient + play affordance */}
       <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-fv-navy/70 via-transparent to-transparent" />
       <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
@@ -1531,7 +1568,8 @@ function VideoTestimonials() {
         Real FitVed member story
       </span>
     </button>
-  );
+    );
+  };
 
   return (
     <section id="video-testimonials" className="py-12 md:py-20 bg-fv-navy border-t border-white/10 overflow-hidden">
@@ -1550,26 +1588,31 @@ function VideoTestimonials() {
           </p>
         </div>
 
-        {/* Desktop: horizontal infinite marquee (matches Meet Your Trainers) */}
-        <div ref={ref} className="reveal hidden sm:block mt-6 relative overflow-hidden">
+        {/* Desktop: horizontal infinite marquee (matches Meet Your Trainers).
+            Only mounted when actually on a >=640px viewport — see useIsDesktopSm. */}
+        {isDesktopSm && (
+        <div ref={ref} className="reveal mt-6 relative overflow-hidden">
           <div className="pointer-events-none absolute inset-y-0 left-0 w-24 bg-gradient-to-r from-fv-navy to-transparent z-10" />
           <div className="pointer-events-none absolute inset-y-0 right-0 w-24 bg-gradient-to-l from-fv-navy to-transparent z-10" />
           <div className="marquee-track py-3">
             {[...VIDEO_TESTIMONIALS, ...VIDEO_TESTIMONIALS].map((t, i) => (
               <div key={`${t.id}-${i}`} className="w-[240px] shrink-0 mx-2">
-                <VideoCard t={t} />
+                <VideoCard t={t} eager={i === 0} />
               </div>
             ))}
           </div>
         </div>
+        )}
 
-        {/* Mobile: clean full-width carousel */}
-        <div className="sm:hidden mt-6 relative">
+        {/* Mobile: clean full-width carousel. Only mounted when NOT on a
+            >=640px viewport, so the desktop marquee's videos never load here. */}
+        {!isDesktopSm && (
+        <div className="mt-6 relative">
           <Carousel opts={{ align: "start", loop: true }} className="w-full">
             <CarouselContent className="-ml-2">
-              {VIDEO_TESTIMONIALS.map((t) => (
+              {VIDEO_TESTIMONIALS.map((t, i) => (
                 <CarouselItem key={t.id} className="pl-2 basis-[72%]">
-                  <VideoCard t={t} />
+                  <VideoCard t={t} eager={i === 0} />
                 </CarouselItem>
               ))}
             </CarouselContent>
@@ -1579,6 +1622,7 @@ function VideoTestimonials() {
             </div>
           </Carousel>
         </div>
+        )}
       </div>
 
       {/* Fullscreen play-with-sound modal */}
